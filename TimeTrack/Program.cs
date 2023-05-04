@@ -4,17 +4,35 @@
     {
         public static void Main()
         {
-
-
-
+            /*
+             * CLI tool that manages the Service 
+             */
+            
+            
+            
+            
+            
+            
+            
         }
         
-        public static int wow(int a, int b)
+        public static void RunScript()
         {
-            return a+b;
+            
+            
+            // wget https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64
         }
     }
 }
+
+/*
+ If I basically have two processes? one that is a running and one that isnt
+*/
+
+
+
+
+
 
 /*
 // The port number must match the port of the gRPC server.
