@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>dotnet-TimeTrack-ACF468CB-14B5-4410-BF47-532E0E8D14CD</UserSecretsId>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0-rc.2.23479.6"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Remove="TTAPI\**" />
+      <Compile Remove="TTWebsite\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Remove="TTAPI\**" />
+      <EmbeddedResource Remove="TTWebsite\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Content Remove="TTAPI\**" />
+      <Content Remove="TTWebsite\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Remove="TTAPI\**" />
+      <None Remove="TTWebsite\**" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="TTAPI\appsettings.Development.json" />
+      <_ContentIncludedByDefault Remove="TTAPI\appsettings.json" />
+      <_ContentIncludedByDefault Remove="TTAPI\obj\project.assets.json" />
+      <_ContentIncludedByDefault Remove="TTAPI\obj\project.packagespec.json" />
+      <_ContentIncludedByDefault Remove="TTAPI\obj\TTAPI.csproj.nuget.dgspec.json" />
+      <_ContentIncludedByDefault Remove="TTAPI\Properties\launchSettings.json" />
+      <_ContentIncludedByDefault Remove="TTWebsite\appsettings.Development.json" />
+      <_ContentIncludedByDefault Remove="TTWebsite\appsettings.json" />
+      <_ContentIncludedByDefault Remove="TTWebsite\obj\project.assets.json" />
+      <_ContentIncludedByDefault Remove="TTWebsite\obj\project.packagespec.json" />
+      <_ContentIncludedByDefault Remove="TTWebsite\obj\TTWebsite.csproj.nuget.dgspec.json" />
+      <_ContentIncludedByDefault Remove="TTWebsite\Properties\launchSettings.json" />
+    </ItemGroup>
+</Project>
