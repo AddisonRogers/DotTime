@@ -59,19 +59,14 @@ func main() {
 		defer reqCancel()
 
 		token := c.Request().Header.Get("token")
-		process := Process{
-			Id:          c.FormValue("id"),
-			Name:        c.FormValue("name"),
-			TimeStarted: c.FormValue("timeStarted"),
-			IsRunning:   c.FormValue("isRunning") == "true",
-			TimeEnded:   c.FormValue("timeEnded"),
-			Duration:    c.FormValue("timeDuration"),
-			Threads:     c.FormValue("threads"),
-			MemoryUsage: c.FormValue("memoryUsage"),
+		doc := new(Doc)
+
+		if err = c.Bind(doc); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid format")
 		}
 
 		filter := bson.D{{Key: "token", Value: token}}
-		update := bson.D{{Key: "$push", Value: bson.D{{Key: "proccesses", Value: process}}}}
+		update := bson.D{{Key: "$push", Value: bson.D{{Key: "proccesses", Value: doc}}}}
 
 		upsert := true
 		after := options.After
@@ -89,5 +84,5 @@ func main() {
 		return c.String(http.StatusOK, "Request success.")
 	})
 
-	e.Logger.Fatal(e.Start(":8080"))
+	e.Logger.Fatal(e.Start(":8083"))
 }
