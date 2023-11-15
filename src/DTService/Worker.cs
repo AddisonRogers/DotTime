@@ -26,7 +26,7 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        File.Create("processes.txt");
+        File.Create("processes.json");
 
         var counter = 0;
         var processesDone = new List<ProcessInfo>();
@@ -85,7 +85,7 @@ public class Worker : BackgroundService
         
         // log data to a txt file
         var json = JsonSerializer.Serialize(processes);
-        await File.AppendAllLinesAsync("processes.txt", new[] { json });
+        await File.AppendAllLinesAsync("processes.json", new[] { json });
     }
     public override Task StopAsync(CancellationToken cancellationToken)
     {

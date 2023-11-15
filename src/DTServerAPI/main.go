@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -11,30 +10,34 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/labstack/echo/v4"
 )
 
-type Process struct {
-	Id          string `json:"id"`
-	Name        string `json:"name"`
+type ProcessHistory struct {
 	TimeStarted string `json:"timeStarted"`
 	IsRunning   bool   `json:"isRunning"`
 	TimeEnded   string `json:"timeEnded"`
-	Duration    string `json:"duration"`
-	Threads     string `json:"threads"`
-	MemoryUsage string `json:"memoryusage"`
+}
+
+type Process struct {
+	Id           string           `json:"id"`
+	Name         string           `json:"name"`
+	ProcessCount []string         `json:"processCount"`
+	History      []ProcessHistory `json:"history"`
+	Threads      []string         `json:"threads"`
+	MemoryUsage  []string         `json:"memoryUsage"`
 }
 
 type Doc struct {
 	Token     string    `json:"token"`
-	Processes []Process `json:"proccesses"`
+	Processes []Process `json:"processes"`
 }
 
 func main() {
-	// main context for client creation
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// client creation using the context created above
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(os.Getenv("MONGO_URI")))
 	if err != nil {
 		log.Fatal(err)
@@ -49,12 +52,7 @@ func main() {
 
 	e := echo.New()
 
-	e.GET("/", func(c echo.Context) error {
-		return c.String(http.StatusOK, "Hello, World!")
-	})
-
 	e.POST("/process", func(c echo.Context) error {
-		// separate context with its own timeout for each request
 		reqCtx, reqCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer reqCancel()
 
@@ -66,6 +64,16 @@ func main() {
 		}
 
 		filter := bson.D{{Key: "token", Value: token}}
+
+		// Loop through each process and each history in the process to update timeEnded where relevant.
+		for i := range doc.Processes {
+			for j := range doc.Processes[i].History {
+				if doc.Processes[i].History[j].IsRunning {
+					doc.Processes[i].History[j].TimeEnded = time.Now().String()
+				}
+			}
+		}
+
 		update := bson.D{{Key: "$push", Value: bson.D{{Key: "proccesses", Value: doc}}}}
 
 		upsert := true
@@ -83,6 +91,4 @@ func main() {
 		fmt.Println("Request success.")
 		return c.String(http.StatusOK, "Request success.")
 	})
-
-	e.Logger.Fatal(e.Start(":8083"))
 }
