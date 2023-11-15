@@ -39,9 +39,8 @@ public class Worker : BackgroundService
                 try
                 {
                     process.EnableRaisingEvents = true; // If it is not in the hashset, it means it's a new process, so we need to enable the event
-                } catch (Exception) { // This occurs when it is a system process
-                    //Console.WriteLine(process.ProcessName);
-                    //_logger.LogError("Error: {error}", error);
+                } catch (Exception error) { // This occurs when it is a system process
+                    _logger.LogError("Error: {error}\n Process {process} cannot be logged :c", error.Message, process.ProcessName);
                 } 
                 
                 process.Exited += (o, eventArgs) => ProcessExited(o, eventArgs, process);
