@@ -8,13 +8,33 @@ public class ProcessInfo
 {
     public required string Id { get; set; }
     public required string Name { get; set; }
+    
     public required string TimeStarted { get; set; }
     public required bool IsRunning { get; set; }
     public required string TimeEnded { get; set; }
-    public required string Duration { get; set; }
     public required string Threads { get; set; }
     public required string MemoryUsage { get; set; }
 }
+
+/*
+ *
+ * type ProcessHistory struct {
+	TimeStarted string `json:"timeStarted"`
+	IsRunning   bool   `json:"isRunning"`
+	TimeEnded   string `json:"timeEnded"`
+}
+
+type Process struct {
+	Id           string           `json:"id"`
+	Name         string           `json:"name"`
+	ProcessCount []string         `json:"processCount"`
+	History      []ProcessHistory `json:"history"`
+	Threads      []string         `json:"threads"`
+	MemoryUsage  []string         `json:"memoryUsage"`
+}
+ */
+
+
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
@@ -63,7 +83,6 @@ public class Worker : BackgroundService
                     TimeStarted = process.StartTime.ToString(), 
                     IsRunning = !process.HasExited,
                     TimeEnded = process.ExitTime.ToString(), 
-                    Duration = (process.ExitTime - process.StartTime).TotalSeconds.ToString(), 
                     Threads = process.Threads.Count.ToString(),
                     MemoryUsage = process.PagedMemorySize64.ToString()
                 };
