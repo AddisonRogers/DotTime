@@ -19,21 +19,18 @@ type ProcessHistory struct {
 }
 
 type DocDB struct {
-	Token     string    `json:"token"`
-	Version   string    `json:"version"`
+	Token     string      `json:"token"`
 	Processes []ProcessDB `json:"processes"`
 }
 
 type ProcessDB struct {
-	Name         string           `json:"name"`
-	ProcessCount []string         `json:"processCount"`
-	History      []ProcessHistory `json:"history"`
+	Name    string           `json:"name"`
+	History []ProcessHistory `json:"history"`
 }
 
 type Process struct {
-	Name         string         `json:"name"`
-	ProcessCount string         `json:"processCount"`
-	History      ProcessHistory `json:"history"`
+	Name    string         `json:"name"`
+	History ProcessHistory `json:"history"`
 }
 
 type Doc struct {
@@ -42,31 +39,7 @@ type Doc struct {
 	Processes []Process `json:"processes"`
 }
 
-/*
-{
-    "token": "xxxxx",
-	"version": "1.0.0",
-    "processes": [
-        {
-            "id": "1",
-            "name": "test",
-            "processCount": ["5", "4"],
-            "history": [{
-				"timeStarted": "2022-01-01 00:00:00",
-				"timeEnded": "2022-01-01 00:00:00"
-				},
-				{
-				"timeStarted": "2022-01-01 00:00:00",
-				"timeEnded": "2022-01-01 00:00:00"
-				}],
-        }
-    ]
-}
-*/
-
 func main() {
-
-	var myList = new List<int> {1, 2, 3, 4, 5};
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -117,44 +90,34 @@ func main() {
 			return c.String(http.StatusInternalServerError, "There was a problem with the request.")
 		} else {
 			// We found an existing document
-
 			for _, process := range doc.Processes { // For all the processes that has been sent in the post request
-				for _, existingProcess := range existingDoc.Processes { // For all the processes that are already in the database
-					if process.Name == existingProcess.Name {
-						// We found a matching process
-						// process.History.TimeStarted
-						if (process.History.TimeStarted == existingProcess.History[len(existingProcess.History)-1].TimeStarted) && (process.History.TimeEnded == nil) {
-							// We found a matching history
-							// Update the existing history
-							existingProcess.History[len(existingProcess.History)-1].TimeEnded = process.History.TimeEnded
-							goto UPDATE
-						}
+
+				matchFound := false
+				for i, existingProcess := range existingDoc.Processes {
+					if process.Name != existingProcess.Name {
+						continue
 					}
-					// No matching process found, append new process
-					//existingProcess.History = append(existingProcess.History, process.History)
+					// We found a matching process
+					if (process.History.TimeStarted == existingProcess.History[len(existingProcess.History)-1].TimeStarted) && (existingProcess.History[len(existingProcess.History)-1].TimeEnded == nil) {
+						existingDoc.Processes[i].History[len(existingProcess.History)-1].TimeEnded = process.History.TimeEnded
+						matchFound = true
+						break
+					}
+					existingDoc.Processes[i].History = append(existingProcess.History, process.History)
+					matchFound = true
 				}
-				// No process found, append new process to the document
-				existingDoc.Processes = append(existingDoc.Processes,
-					ProcessDB{
-						Name:         process.Name,
-						ProcessCount: []string{process.ProcessCount},
-						History:      []ProcessHistory{process.History},
+
+				// If no matching process was found, add a new process.
+				if !matchFound {
+					existingDoc.Processes = append(existingDoc.Processes, ProcessDB{
+						Name:    process.Name,
+						History: []ProcessHistory{process.History},
 					})
+				}
 			}
-
-			// new list
-
-			// No matching history found, append new process
-			existingDoc.Processes = append(existingDoc.Processes, doc.Processes...)
 		}
-		// Using the filter to find the document in the collection
-		// then with the document found, if we have a process with the same starting time value but no ending value then we will instead update the value in process.history[n] otherwise if it is a new history value we push the new process to the array
-		//
 
-		UPDATE:
-
-		update := bson.D{{Key: "$push", Value: bson.D{{Key: "proccesses", Value: doc}}}}
-
+		update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: doc}}}}
 		upsert := true
 		after := options.After
 		opts := options.FindOneAndUpdateOptions{
@@ -173,6 +136,4 @@ func main() {
 
 	e.Logger.Fatal(e.Start(":1323"))
 
-
 }
-
