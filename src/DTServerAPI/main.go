@@ -65,6 +65,8 @@ type Doc struct {
 */
 
 func main() {
+
+	var myList = new List<int> {1, 2, 3, 4, 5};
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -116,7 +118,6 @@ func main() {
 		} else {
 			// We found an existing document
 
-
 			for _, process := range doc.Processes { // For all the processes that has been sent in the post request
 				for _, existingProcess := range existingDoc.Processes { // For all the processes that are already in the database
 					if process.Name == existingProcess.Name {
@@ -135,15 +136,17 @@ func main() {
 				// No process found, append new process to the document
 				existingDoc.Processes = append(existingDoc.Processes,
 					ProcessDB{
-						Name: process.Name,
+						Name:         process.Name,
 						ProcessCount: []string{process.ProcessCount},
-						History: []ProcessHistory{process.History},
+						History:      []ProcessHistory{process.History},
 					})
 			}
 
+			// new list
+
 			// No matching history found, append new process
 			existingDoc.Processes = append(existingDoc.Processes, doc.Processes...)
-
+		}
 		// Using the filter to find the document in the collection
 		// then with the document found, if we have a process with the same starting time value but no ending value then we will instead update the value in process.history[n] otherwise if it is a new history value we push the new process to the array
 		//
@@ -169,4 +172,7 @@ func main() {
 	})
 
 	e.Logger.Fatal(e.Start(":1323"))
+
+
 }
+
