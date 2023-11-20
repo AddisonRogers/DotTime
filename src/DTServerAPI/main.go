@@ -14,8 +14,8 @@ import (
 )
 
 type ProcessHistory struct {
-	TimeStarted string  `json:"timeStarted"`
-	TimeEnded   *string `json:"timeEnded,omitempty"`
+	TimeStarted string `json:"timeStarted"`
+	TimeEnded   string `json:"timeEnded"`
 }
 
 type DocDB struct {
@@ -45,7 +45,8 @@ func main() {
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
 	if err != nil {
-		log.Fatal(err)
+		//log.Fatal(err)
+		panic(err)
 	}
 	defer func() {
 		if err = client.Disconnect(context.Background()); err != nil {
@@ -98,7 +99,7 @@ func main() {
 						continue
 					}
 					// We found a matching process
-					if (process.History.TimeStarted == existingProcess.History[len(existingProcess.History)-1].TimeStarted) && (existingProcess.History[len(existingProcess.History)-1].TimeEnded == nil) {
+					if (process.History.TimeStarted == existingProcess.History[len(existingProcess.History)-1].TimeStarted) && (existingProcess.History[len(existingProcess.History)-1].TimeEnded == "") {
 						existingDoc.Processes[i].History[len(existingProcess.History)-1].TimeEnded = process.History.TimeEnded
 						matchFound = true
 						break
@@ -117,7 +118,7 @@ func main() {
 			}
 		}
 
-		update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: doc}}}}
+		update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: existingDoc.Processes}}}}
 		upsert := true
 		after := options.After
 		opts := options.FindOneAndUpdateOptions{
