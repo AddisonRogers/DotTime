@@ -1,4 +1,7 @@
+using System.ComponentModel;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -9,27 +12,42 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
-var sampleTodos = new Todo[]
-{
-    new(1, "Walk the dog"),
-    new(2, "Do the dishes", DateOnly.FromDateTime(DateTime.Now)),
-    new(3, "Do the laundry", DateOnly.FromDateTime(DateTime.Now.AddDays(1))),
-    new(4, "Clean the bathroom"),
-    new(5, "Clean the car", DateOnly.FromDateTime(DateTime.Now.AddDays(2)))
-};
-
-var todosApi = app.MapGroup("/todos");
-todosApi.MapGet("/", () => sampleTodos);
-todosApi.MapGet("/{id}", (int id) =>
-    sampleTodos.FirstOrDefault(a => a.Id == id) is { } todo
-        ? Results.Ok(todo)
-        : Results.NotFound());
+app.MapGet("/", () => "Hello World!");
+app.MapPost("/process" ,  context => {
+	Console.WriteLine("Received request");
+	if (context.Response.ContentType == "application/json")
+	{
+		var doc = JsonSerializer.DeserializeAsync<Doc>(context.Request.Body, cancellationToken: context.RequestAborted);
+		Console.WriteLine($"Received {doc.Result.ToString()}");
+	}
+	else
+	{
+		Console.WriteLine("Received non-json request");
+		Console.WriteLine($"Received {context.Request.Body}");
+	}
+	return Task.FromResult(Results.Ok());
+});
 
 app.Run();
 
-public record Todo(int Id, string? Title, DateOnly? DueBy = null, bool IsComplete = false);
+public struct Doc(
+    [property: JsonPropertyName("token")] string token,
+	[property: JsonPropertyName("processes")] Process[] processes
+    );
 
-[JsonSerializable(typeof(Todo[]))]
+public struct Process(
+	[property: JsonPropertyName("name")] string Name,
+	[property: JsonPropertyName("history")] ProcessHistory[] History
+	);
+
+public struct ProcessHistory(
+	[property: JsonPropertyName("timeStarted")] string TimeStarted,
+	[property: JsonPropertyName("timeEnded")] string? TimeEnded
+);
+
+
+
+[JsonSerializable(typeof(Doc))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 }

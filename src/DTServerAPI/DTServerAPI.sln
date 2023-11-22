@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotTime", "DotTime.csproj", "{DFF8803C-6326-44BE-9817-B602524AC885}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DTServerAPI", "DTServerAPI.csproj", "{DFF8803C-6326-44BE-9817-B602524AC885}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
