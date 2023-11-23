@@ -31,17 +31,16 @@ app.MapPost("/process" ,  async delegate(HttpContext context) {
 	var doc = JsonSerializer.Deserialize<Doc>(await reader.ReadToEndAsync());
 	// then we store it in mongo
 	
-	// filter := bson.D{{Key: "token", Value: doc.Token}}
-	// update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: doc.Processes}}}}
-	/*doc := new(Doc)
-
-		if err = c.Bind(doc); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid format")
-		}
-
-		filter := bson.D{{Key: "token", Value: doc.Token}}
-
-		var existingDoc DocDB
+	var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
+	var existingDoc = await processCollection.Find(filter).FirstOrDefaultAsync();
+	
+	var document = processCollection.Find(filter).FirstOrDefaultAsync();
+	if (document.Result == null) {
+		Console.WriteLine("Inserting new document");
+		await processCollection.InsertOneAsync(doc);
+		return Results.Ok();
+	}
+	/*
 		err = collection.FindOne(reqCtx, filter).Decode(&existingDoc)
 		if errors.Is(mongo.ErrNoDocuments, err) {
 			// Insert the new document if it doesn't exist
