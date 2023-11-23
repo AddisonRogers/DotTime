@@ -1,11 +1,88 @@
 @DotTime_HostAddress = http://localhost:5171
 
-GET {{DotTime_HostAddress}}/todos/
+GET {{DotTime_HostAddress}}/
 Accept: application/json
 
 ###
-
-GET {{DotTime_HostAddress}}/todos/1
-Accept: application/json
+# @name Hello World
+{{DotTime_HostAddress}}/
 
 ###
+# @name Post Start Process
+POST localhost:1323/process
+X-Api-Version: 1.0.0
+Content-Type: application/json
+{
+  "token": "xxxxx",
+  "version": "1.0.0",
+  "processes": [
+     {
+      "name": "test3",
+      "history": [
+      {
+        "timeStarted": "2022-01-01 00:00:00",
+        "timeEnded": ""
+      }
+     ]
+    }
+  ]
+}
+
+###
+# @name Post End Process
+POST localhost:1323/process
+X-Api-Version: 1.0.0
+Content-Type: application/json
+{
+  "token": "xxxxx",
+  "version": "1.0.0",
+  "processes": [
+    {
+      "name": "test3",
+      "history": [
+        {
+          "timeStarted": "2022-01-01 00:00:00",
+          "timeEnded": "2022-01-01 00:00:00"
+        }
+      ]
+    }
+  ]
+}
+
+###
+# @name Post Multiple Processes
+POST localhost:1323/process
+X-Api-Version: 1.0.0
+Content-Type: application/json
+{
+  "token": "xxxxx",
+  "version": "1.0.0",
+  "processes": [
+    {
+      "name": "test3",
+      "history": [
+        {
+          "timeStarted": "2022-01-01 00:00:00",
+          "timeEnded": "2022-01-01 00:00:00"
+        }
+      ]
+    }
+    {
+      "name": "test4",
+      "history": [
+        {
+          "timeStarted": "2022-01-02 00:00:00",
+          "timeEnded": "2022-01-03 00:00:00"
+        },
+        {
+          "timeStarted": "2022-01-02 00:00:00",
+          "timeEnded": "2022-01-03 00:00:00"
+        },
+        {
+          "timeStarted": "2022-01-02 00:00:00",
+          "timeEnded": ""
+        }
+      ]
+    }
+  ]
+}
