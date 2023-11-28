@@ -7,6 +7,21 @@ using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using MongoDB.Bson;
 
+public struct Doc(
+	[property: JsonPropertyName("token")] string token,
+	[property: JsonPropertyName("processes")] Process[] processes
+);
+
+public struct Process(
+	[property: JsonPropertyName("name")] string Name,
+	[property: JsonPropertyName("history")] ProcessHistory[] History
+);
+
+public struct ProcessHistory(
+	[property: JsonPropertyName("timeStarted")] string TimeStarted,
+	[property: JsonPropertyName("timeEnded")] string? TimeEnded
+);
+
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -23,97 +38,104 @@ var processCollection = database.GetCollection<BsonDocument>(app.Services.GetReq
 Console.WriteLine("Connected to database");
 
 app.MapGet("/", () => "Hello World!");
-app.MapPost("/process" ,  async delegate(HttpContext context) {
-	Console.WriteLine("Received request");
-	var version = context.Request.Headers["X-Api-Version"];
-	Console.WriteLine($"Version: {version}");
-	using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
-	var doc = JsonSerializer.Deserialize<Doc>(await reader.ReadToEndAsync());
-	// then we store it in mongo
-	
-	var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
-	var existingDoc = await processCollection.Find(filter).FirstOrDefaultAsync();
-	
-	var document = processCollection.Find(filter).FirstOrDefaultAsync();
-	if (document.Result == null) {
-		Console.WriteLine("Inserting new document");
-		await processCollection.InsertOneAsync(doc);
-		return Results.Ok();
-	}
-	/*
-		err = collection.FindOne(reqCtx, filter).Decode(&existingDoc)
-		if errors.Is(mongo.ErrNoDocuments, err) {
-			// Insert the new document if it doesn't exist
-			_, err = collection.InsertOne(reqCtx, doc)
-			if err != nil {
-				log.Fatal(err)
-				return c.String(http.StatusInternalServerError, "There was a problem with request.")
-			}
-			fmt.Println("Request success.")
-			return c.String(http.StatusOK, "Request success.")
-		} else if err != nil {
-			log.Fatal(err)
-			return c.String(http.StatusInternalServerError, "There was a problem with the request.")
-		} else {
-			// We found an existing document
-			for _, process := range doc.Processes { // For all the processes that has been sent in the post request
+app.MapPost("/process", async delegate(HttpContext context)
+    {
+        try
+        {
+            Console.WriteLine("Received request");
+            var version = context.Request.Headers["X-Api-Version"];
+            Console.WriteLine($"Version: {version}");
 
-				matchFound := false
-				for i, existingProcess := range existingDoc.Processes {
-					if process.Name != existingProcess.Name {
-						continue
-					}
-					// We found a matching process
-					if (process.History.TimeStarted == existingProcess.History[len(existingProcess.History)-1].TimeStarted) && (existingProcess.History[len(existingProcess.History)-1].TimeEnded == nil) {
-						existingDoc.Processes[i].History[len(existingProcess.History)-1].TimeEnded = process.History.TimeEnded
-						matchFound = true
-						break
-					}
-					existingDoc.Processes[i].History = append(existingProcess.History, process.History)
-					matchFound = true
-				}
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+            string requestContent;
 
-				// If no matching process was found, add a new process.
-				if !matchFound {
-					existingDoc.Processes = append(existingDoc.Processes, ProcessDB{
-						Name:    process.Name,
-						History: []ProcessHistory{process.History},
-					})
-				}
-			}
+            try
+            {
+                requestContent = await reader.ReadToEndAsync();
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine($"IO error occurred while reading the request: {ex.Message}");
+                return Results.Problem();
+            }
+
+            Doc doc;
+
+            try
+            {
+                doc = JsonSerializer.Deserialize<Doc>(requestContent);
+            }
+            catch (JsonException ex)
+            {
+                Console.WriteLine($"JSON error occurred while deserializing the request content: {ex.Message}");
+                return Results.BadRequest();
+            }
+            
+        
+	
+			var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
 			
-			update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: doc}}}}
-		upsert := true
-		after := options.After
-		opts := options.FindOneAndUpdateOptions{
-			ReturnDocument: &after,
-			Upsert:         &upsert,
-		}
-		
-		err = collection.FindOneAndUpdate(reqCtx, filter, update, &opts).Err()
-		if err != nil {
-			log.Fatal(err)
-			return c.String(http.StatusInternalServerError, "There was a problem with the request.")
-		}
-			*/
-});
+			var document = processCollection.Find(filter).FirstOrDefaultAsync();
+			if (document.Result == null) { 
+				Console.WriteLine("Inserting new document");
+				await processCollection.InsertOneAsync(doc.ToBsonDocument());
+				return Results.Ok();
+			} // If the document doesn't exist, create a new one
+
+			
+			/*			
+					for _, process := range doc.Processes { // For all the processes that has been sent in the post request
+
+						matchFound := false
+						for i, existingProcess := range existingDoc.Processes {
+							if process.Name != existingProcess.Name {
+								continue
+							}
+							// We found a matching process
+							if (process.History.TimeStarted == existingProcess.History[len(existingProcess.History)-1].TimeStarted) && (existingProcess.History[len(existingProcess.History)-1].TimeEnded == nil) {
+								existingDoc.Processes[i].History[len(existingProcess.History)-1].TimeEnded = process.History.TimeEnded
+								matchFound = true
+								break
+							}
+							existingDoc.Processes[i].History = append(existingProcess.History, process.History)
+							matchFound = true
+						}
+
+						// If no matching process was found, add a new process.
+						if !matchFound {
+							existingDoc.Processes = append(existingDoc.Processes, ProcessDB{
+								Name:    process.Name,
+								History: []ProcessHistory{process.History},
+							})
+						}
+					}
+					
+					update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: doc}}}}
+				upsert := true
+				after := options.After
+				opts := options.FindOneAndUpdateOptions{
+					ReturnDocument: &after,
+					Upsert:         &upsert,
+				}
+				
+				err = collection.FindOneAndUpdate(reqCtx, filter, update, &opts).Err()
+				if err != nil {
+					log.Fatal(err)
+					return c.String(http.StatusInternalServerError, "There was a problem with the request.")
+				}
+					*/
+
+        }
+        catch (Exception ex)
+        {
+	        // General error handling
+	        Console.WriteLine($"An error occurred: {ex.Message}");
+        }
+    });
 
 app.Run();
 
-public struct Doc(
-    [property: JsonPropertyName("token")] string token,
-	[property: JsonPropertyName("processes")] Process[] processes
-    );
 
-public struct Process(
-	[property: JsonPropertyName("name")] string Name,
-	[property: JsonPropertyName("history")] ProcessHistory[] History
-	);
-
-public struct ProcessHistory(
-	[property: JsonPropertyName("timeStarted")] string TimeStarted,
-	[property: JsonPropertyName("timeEnded")] string? TimeEnded
-);
 
 
 [JsonSerializable(typeof(Doc))]
