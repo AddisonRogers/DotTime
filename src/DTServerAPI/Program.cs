@@ -7,26 +7,11 @@ using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using MongoDB.Bson;
 
-public struct Doc(
-	[property: JsonPropertyName("token")] string token,
-	[property: JsonPropertyName("processes")] Process[] processes
-);
-
-public struct Process(
-	[property: JsonPropertyName("name")] string Name,
-	[property: JsonPropertyName("history")] ProcessHistory[] History
-);
-
-public struct ProcessHistory(
-	[property: JsonPropertyName("timeStarted")] string TimeStarted,
-	[property: JsonPropertyName("timeEnded")] string? TimeEnded
-);
-
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
+	options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
 builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(nameof(DatabaseSettings)));
 
@@ -39,51 +24,55 @@ Console.WriteLine("Connected to database");
 
 app.MapGet("/", () => "Hello World!");
 app.MapPost("/process", async delegate(HttpContext context)
-    {
-        try
-        {
-            Console.WriteLine("Received request");
-            var version = context.Request.Headers["X-Api-Version"];
-            Console.WriteLine($"Version: {version}");
+{
+	try
+	{
+		Console.WriteLine("Received request");
+		var version = context.Request.Headers["X-Api-Version"];
+		Console.WriteLine($"Version: {version}");
 
-            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
-            string requestContent;
+		using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+		string requestContent;
 
-            try
-            {
-                requestContent = await reader.ReadToEndAsync();
-            }
-            catch (IOException ex)
-            {
-                Console.WriteLine($"IO error occurred while reading the request: {ex.Message}");
-                return Results.Problem();
-            }
+		try
+		{
+			requestContent = await reader.ReadToEndAsync();
+		}
+		catch (IOException ex)
+		{
+			Console.WriteLine($"IO error occurred while reading the request: {ex.Message}");
+			return Results.Problem();
+		}
 
-            Doc doc;
+		Doc doc;
 
-            try
-            {
-                doc = JsonSerializer.Deserialize<Doc>(requestContent);
-            }
-            catch (JsonException ex)
-            {
-                Console.WriteLine($"JSON error occurred while deserializing the request content: {ex.Message}");
-                return Results.BadRequest();
-            }
+		try
+		{
+			doc = JsonSerializer.Deserialize<Doc>(requestContent);
+		}
+		catch (JsonException ex)
+		{
+			Console.WriteLine($"JSON error occurred while deserializing the request content: {ex.Message}");
+			return Results.BadRequest();
+		}
             
         
 	
-			var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
+		var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
 			
-			var document = processCollection.Find(filter).FirstOrDefaultAsync();
-			if (document.Result == null) { 
-				Console.WriteLine("Inserting new document");
-				await processCollection.InsertOneAsync(doc.ToBsonDocument());
-				return Results.Ok();
-			} // If the document doesn't exist, create a new one
+		var document = processCollection.Find(filter).FirstOrDefaultAsync();
+		if (document.Result == null) { 
+			Console.WriteLine("Inserting new document");
+			await processCollection.InsertOneAsync(doc.ToBsonDocument());
+			return Results.Ok();
+		} // If the document doesn't exist, create a new one
 
+		foreach (var process in doc.processes)
+		{
 			
-			/*			
+		}
+		
+		/*			
 					for _, process := range doc.Processes { // For all the processes that has been sent in the post request
 
 						matchFound := false
@@ -125,17 +114,39 @@ app.MapPost("/process", async delegate(HttpContext context)
 				}
 					*/
 
-        }
-        catch (Exception ex)
-        {
-	        // General error handling
-	        Console.WriteLine($"An error occurred: {ex.Message}");
-        }
-    });
+	}
+	catch (Exception ex)
+	{
+		// General error handling
+		Console.WriteLine($"An error occurred: {ex.Message}");
+	}
+});
 
 app.Run();
 
+public struct Doc
+{
+	[property: JsonPropertyName("token")] 
+	public string token { get; set; }
+	[property: JsonPropertyName("processes")]
+	public Process[] processes { get; set; }
+};
 
+public struct Process
+{
+	[property: JsonPropertyName("name")] 
+	public string Name { get; set; }
+	[property: JsonPropertyName("history")]
+	public ProcessHistory[] History { get; set; }
+};
+
+public struct ProcessHistory
+{
+	[property: JsonPropertyName("timeStarted")]
+	public string TimeStarted { get; set; }
+	[property: JsonPropertyName("timeEnded")]
+	public string? TimeEnded { get; set; }
+};
 
 
 [JsonSerializable(typeof(Doc))]
