@@ -55,13 +55,12 @@ app.MapPost("/process", async delegate(HttpContext context)
 			Console.WriteLine($"JSON error occurred while deserializing the request content: {ex.Message}");
 			return Results.BadRequest();
 		}
-            
-        
-	
+		
 		var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
 			
 		var document = processCollection.Find(filter).FirstOrDefaultAsync();
-		if (document.Result == null) { 
+		var documentResult = document.Result;
+		if (documentResult == null) { 
 			Console.WriteLine("Inserting new document");
 			await processCollection.InsertOneAsync(doc.ToBsonDocument());
 			return Results.Ok();
@@ -69,13 +68,29 @@ app.MapPost("/process", async delegate(HttpContext context)
 
 		foreach (var process in doc.processes)
 		{
-			
+			// direct conversion 
+			bool matchFound = false;
+			for (int i = 0; i < documentResult["processes"].AsBsonArray.Count; i++)
+			{
+				var existingProcess = documentResult["processes"].AsBsonArray[i];
+				if (process.Name != existingProcess["name"].AsString)
+				{
+					continue;
+				}
+				// We found a matching process
+				if (process.History[0].TimeStarted == existingProcess["history"].AsBsonArray[^1]["timeStarted"].AsString && existingProcess["history"].AsBsonArray[^1]["timeEnded"].AsString == null)
+				{
+					existingProcess["history"].AsBsonArray[^1]["timeEnded"] = process.History[0].TimeEnded;
+					matchFound = true;
+					break;
+				}
+				existingProcess["history"].AsBsonArray.Add(process.History[0].ToBsonDocument());
+				matchFound = true;
+			}
 		}
 		
 		/*			
-					for _, process := range doc.Processes { // For all the processes that has been sent in the post request
-
-						matchFound := false
+					matchFound := false
 						for i, existingProcess := range existingDoc.Processes {
 							if process.Name != existingProcess.Name {
 								continue
