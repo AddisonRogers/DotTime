@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -57,62 +58,37 @@ app.MapPost("/process", async delegate(HttpContext context)
 		}
 		
 		var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
-			
-		var document = processCollection.Find(filter).FirstOrDefaultAsync();
-		var documentResult = document.Result;
-		if (documentResult == null) { 
+		
+		var document = processCollection.Find(filter).FirstOrDefaultAsync().Result;
+		if (document == null) { 
 			Console.WriteLine("Inserting new document");
 			await processCollection.InsertOneAsync(doc.ToBsonDocument());
 			return Results.Ok();
-		} // If the document doesn't exist, create a new one
+		} // If the document doesn't exist, create a new one TODO fix
 
 		foreach (var process in doc.processes)
 		{
-			// direct conversion 
-			bool matchFound = false;
-			for (int i = 0; i < documentResult["processes"].AsBsonArray.Count; i++)
-			{
-				var existingProcess = documentResult["processes"].AsBsonArray[i];
-				if (process.Name != existingProcess["name"].AsString)
-				{
-					continue;
-				}
-				// We found a matching process
-				if (process.History[0].TimeStarted == existingProcess["history"].AsBsonArray[^1]["timeStarted"].AsString && existingProcess["history"].AsBsonArray[^1]["timeEnded"].AsString == null)
-				{
-					existingProcess["history"].AsBsonArray[^1]["timeEnded"] = process.History[0].TimeEnded;
-					matchFound = true;
-					break;
-				}
-				existingProcess["history"].AsBsonArray.Add(process.History[0].ToBsonDocument());
-				matchFound = true;
-			}
+			var dbProcess = document["processes"].AsBsonArray
+				.Cast<BsonDocument>()
+				.FirstOrDefault(p => p["name"].AsString == process.Name);
+
+			if (dbProcess == null) {
+				document["processes"].AsBsonArray.Add(process.ToBsonDocument()); 
+				continue;
+			} // If the process doesn't exist, create a new one
+
+			var lastHistory = dbProcess["history"].AsBsonArray.Last() as BsonDocument; // Get the last history entry
+			
+			if (lastHistory != null
+			    && process.History[0].TimeStarted == lastHistory["timeStarted"].AsString
+			    && lastHistory["timeEnded"].AsString == null) lastHistory["timeEnded"] = process.History[0].TimeEnded;
+			else dbProcess["history"].AsBsonArray.Add(process.History[0].ToBsonDocument());
 		}
 		
+		
 		/*			
-					matchFound := false
-						for i, existingProcess := range existingDoc.Processes {
-							if process.Name != existingProcess.Name {
-								continue
-							}
-							// We found a matching process
-							if (process.History.TimeStarted == existingProcess.History[len(existingProcess.History)-1].TimeStarted) && (existingProcess.History[len(existingProcess.History)-1].TimeEnded == nil) {
-								existingDoc.Processes[i].History[len(existingProcess.History)-1].TimeEnded = process.History.TimeEnded
-								matchFound = true
-								break
-							}
-							existingDoc.Processes[i].History = append(existingProcess.History, process.History)
-							matchFound = true
-						}
-
-						// If no matching process was found, add a new process.
-						if !matchFound {
-							existingDoc.Processes = append(existingDoc.Processes, ProcessDB{
-								Name:    process.Name,
-								History: []ProcessHistory{process.History},
-							})
-						}
-					}
+					
+					
 					
 					update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: doc}}}}
 				upsert := true
