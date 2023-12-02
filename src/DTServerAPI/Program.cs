@@ -84,32 +84,24 @@ app.MapPost("/process", async delegate(HttpContext context)
 			    && lastHistory["timeEnded"].AsString == null) lastHistory["timeEnded"] = process.History[0].TimeEnded;
 			else dbProcess["history"].AsBsonArray.Add(process.History[0].ToBsonDocument());
 		}
-		
-		
-		/*			
-					
-					
-					
-					update := bson.D{{Key: "$push", Value: bson.D{{Key: "processes", Value: doc}}}}
-				upsert := true
-				after := options.After
-				opts := options.FindOneAndUpdateOptions{
-					ReturnDocument: &after,
-					Upsert:         &upsert,
-				}
-				
-				err = collection.FindOneAndUpdate(reqCtx, filter, update, &opts).Err()
-				if err != nil {
-					log.Fatal(err)
-					return c.String(http.StatusInternalServerError, "There was a problem with the request.")
-				}
-					*/
 
+		var update = Builders<BsonDocument>.Update
+			.Set("processes", document["processes"]);
+		var opts = new UpdateOptions()
+		{
+			IsUpsert = true
+		};
+		
+		var result = await processCollection.UpdateOneAsync(filter, update, opts);
+		Console.WriteLine($"Updated {result.ModifiedCount} documents");
+		
+		return Results.Ok();
 	}
 	catch (Exception ex)
 	{
 		// General error handling
 		Console.WriteLine($"An error occurred: {ex.Message}");
+		return Results.Problem();
 	}
 });
 
