@@ -14,18 +14,18 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 {
 	options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
-builder.Services.Configure<DatabaseSettings>(builder.Configuration.GetSection(nameof(DatabaseSettings)));
 
 var app = builder.Build();
 
-var client = new MongoClient(app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value.ConnectionString);
-var database = client.GetDatabase(app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value.DatabaseName);
-var processCollection = database.GetCollection<BsonDocument>(app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value.ProcessCollectionName);
+var client = new MongoClient("mongodb://localhost:27017");
+var database = client.GetDatabase("db");
+var processCollection = database.GetCollection<BsonDocument>("processes");
 Console.WriteLine("Connected to database");
 
 app.MapGet("/", () => "Hello World!");
 app.MapPost("/process", async delegate(HttpContext context)
 {
+	Console.WriteLine("Received request");
 	try
 	{
 		Console.WriteLine("Received request");
@@ -135,13 +135,4 @@ public struct ProcessHistory
 [JsonSerializable(typeof(Doc))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
-}
-
-public class DatabaseSettings
-{
-	public string ConnectionString { get; set; } = null!;
-
-	public string DatabaseName { get; set; } = null!;
-
-	public string ProcessCollectionName { get; set; } = null!;
 }

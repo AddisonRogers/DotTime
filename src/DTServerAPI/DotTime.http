@@ -1,15 +1,18 @@
 @DotTime_HostAddress = http://localhost:5171
 
-GET {{DotTime_HostAddress}}/
-Accept: application/json
-
 ###
-# @name Hello World
-{{DotTime_HostAddress}}/
+### Successful test: check response status is 200
+GET {{DotTime_HostAddress}}/
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
 
 ###
 # @name Post Start Process
-POST localhost:1323/process
+POST {{DotTime_HostAddress}}/process
 X-Api-Version: 1.0.0
 Content-Type: application/json
 {
@@ -28,9 +31,15 @@ Content-Type: application/json
   ]
 }
 
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
+
 ###
 # @name Post End Process
-POST localhost:1323/process
+POST {{DotTime_HostAddress}}/process
 X-Api-Version: 1.0.0
 Content-Type: application/json
 {
@@ -49,9 +58,15 @@ Content-Type: application/json
   ]
 }
 
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
+
 ###
 # @name Post Multiple Processes
-POST localhost:1323/process
+POST {{DotTime_HostAddress}}/process
 X-Api-Version: 1.0.0
 Content-Type: application/json
 {
@@ -80,9 +95,15 @@ Content-Type: application/json
         },
         {
           "timeStarted": "2022-01-02 00:00:00",
-          "timeEnded": ""
+          "time Ended": ""
         }
       ]
     }
   ]
 }
+
+> {%
+    client.test("Request executed successfully", function() {
+        client.assert(response.status === 200, "Response status is not 200");
+    });
+%}
