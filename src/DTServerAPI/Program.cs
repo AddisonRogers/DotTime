@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.Extensions.Options;
@@ -12,7 +13,7 @@ var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
-	options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
+	options.SerializerOptions.TypeInfoResolverChain.Insert(0, JsonContext.Default);
 });
 
 var app = builder.Build();
@@ -49,30 +50,32 @@ app.MapPost("/process", async delegate(HttpContext context)
 		Console.WriteLine($"Version: {version}");
 
 		using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
-		string requestContent;
-		try
-		{
-			requestContent = await reader.ReadToEndAsync();
-		}
-		catch (IOException ex)
-		{
-			Console.WriteLine($"IO error occurred while reading the request: {ex.Message}");
-			return Results.Problem();
-		}
-
-		Doc doc;
+		var json = await JsonNode.ParseAsync(context.Request.Body);
+		Console.WriteLine(json?.ToString());
+		Console.WriteLine(json?["token"].ToString());
 		
+		Doc doc;
+
 		try
 		{
-			doc = JsonSerializer.Deserialize<Doc>(requestContent, AppJsonSerializerContext.Default.Doc);
+			doc = JsonSerializer.Deserialize<Doc>(json.ToString(), JsonContext.Default.Doc);
 		}
 		catch (JsonException ex)
 		{
 			Console.WriteLine($"JSON error occurred while deserializing the request content: {ex.Message}");
 			return Results.BadRequest();
 		}
+		
+		if (doc is not { Processes: not null })
+		{
+			// Handle case where either doc or doc.Processes is null
+			
+			Console.WriteLine("doc or doc.Processes is null!");
+			return Results.Problem();
+		}
 
-		Console.WriteLine(doc.ToString());
+		Console.WriteLine(doc.Processes.Length);
+		
 		var filter = Builders<BsonDocument>.Filter.Eq("token", doc.Token); // Flag error but it works lmao
 		
 		var document = processCollection.Find(filter).FirstOrDefaultAsync().Result;
@@ -81,7 +84,7 @@ app.MapPost("/process", async delegate(HttpContext context)
 			await processCollection.InsertOneAsync(doc.ToBsonDocument());
 			return Results.Ok();
 		} // If the document doesn't exist, create a new one TODO fix
-
+		
 		Console.WriteLine(doc.Processes.Length);
 		doc.Processes.AsParallel().ForAll(process =>
 		{
@@ -145,6 +148,6 @@ public partial class ProcessHistory
 [JsonSerializable(typeof(Doc))]
 [JsonSerializable(typeof(Process))]
 [JsonSerializable(typeof(ProcessHistory))]
-internal partial class AppJsonSerializerContext : JsonSerializerContext
+internal partial class JsonContext : JsonSerializerContext
 {
 }
