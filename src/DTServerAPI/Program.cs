@@ -16,11 +16,27 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var app = builder.Build();
+IMongoCollection<BsonDocument> processCollection;
 
-var client = new MongoClient("mongodb://localhost:27017");
-var database = client.GetDatabase("db");
-var processCollection = database.GetCollection<BsonDocument>("processes");
-Console.WriteLine("Connected to database");
+try
+{
+	var gettingData = Task.Run(() =>
+	{
+		var client = new MongoClient("mongodb://localhost:27017");
+		var database = client.GetDatabase("db");
+		Console.WriteLine(database.ListCollections());
+		return database.GetCollection<BsonDocument>("processes");
+	});
+
+	if (gettingData.Wait(5000)) processCollection = gettingData.Result;
+	else throw new Exception("No response from database");
+	Console.WriteLine("Connected to database");
+}
+catch (Exception ex)
+{
+	Console.WriteLine(ex);
+	throw new Exception("Unable to connect to database.", ex);
+}
 
 app.MapGet("/", () => "Hello World!");
 app.MapPost("/process", async delegate(HttpContext context)
@@ -34,7 +50,6 @@ app.MapPost("/process", async delegate(HttpContext context)
 
 		using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
 		string requestContent;
-
 		try
 		{
 			requestContent = await reader.ReadToEndAsync();
@@ -46,18 +61,19 @@ app.MapPost("/process", async delegate(HttpContext context)
 		}
 
 		Doc doc;
-
+		
 		try
 		{
-			doc = JsonSerializer.Deserialize<Doc>(requestContent);
+			doc = JsonSerializer.Deserialize<Doc>(requestContent, AppJsonSerializerContext.Default.Doc);
 		}
 		catch (JsonException ex)
 		{
 			Console.WriteLine($"JSON error occurred while deserializing the request content: {ex.Message}");
 			return Results.BadRequest();
 		}
-		
-		var filter = Builders<BsonDocument>.Filter.Eq("token", doc.token); // Flag error but it works lmao
+
+		Console.WriteLine(doc.ToString());
+		var filter = Builders<BsonDocument>.Filter.Eq("token", doc.Token); // Flag error but it works lmao
 		
 		var document = processCollection.Find(filter).FirstOrDefaultAsync().Result;
 		if (document == null) { 
@@ -66,24 +82,25 @@ app.MapPost("/process", async delegate(HttpContext context)
 			return Results.Ok();
 		} // If the document doesn't exist, create a new one TODO fix
 
-		foreach (var process in doc.processes)
+		Console.WriteLine(doc.Processes.Length);
+		doc.Processes.AsParallel().ForAll(process =>
 		{
 			var dbProcess = document["processes"].AsBsonArray
 				.Cast<BsonDocument>()
 				.FirstOrDefault(p => p["name"].AsString == process.Name);
 
 			if (dbProcess == null) {
-				document["processes"].AsBsonArray.Add(process.ToBsonDocument()); 
-				continue;
+				document["processes"].AsBsonArray.Add(process.ToBsonDocument());
+				return;
 			} // If the process doesn't exist, create a new one
 
-			var lastHistory = dbProcess["history"].AsBsonArray.Last() as BsonDocument; // Get the last history entry
+			var lastHistory = dbProcess["history"].AsBsonArray.LastOrDefault() as BsonDocument; // Get the last history entry
 			
 			if (lastHistory != null
 			    && process.History[0].TimeStarted == lastHistory["timeStarted"].AsString
 			    && lastHistory["timeEnded"].AsString == null) lastHistory["timeEnded"] = process.History[0].TimeEnded;
 			else dbProcess["history"].AsBsonArray.Add(process.History[0].ToBsonDocument());
-		}
+		});
 
 		var update = Builders<BsonDocument>.Update
 			.Set("processes", document["processes"]);
@@ -100,39 +117,34 @@ app.MapPost("/process", async delegate(HttpContext context)
 	catch (Exception ex)
 	{
 		// General error handling
-		Console.WriteLine($"An error occurred: {ex.Message}");
+		Console.WriteLine($"An error occurred: {ex.Message} {ex.StackTrace}");
 		return Results.Problem();
 	}
 });
 
 app.Run();
 
-public struct Doc
+public partial class Doc
 {
-	[property: JsonPropertyName("token")] 
-	public string token { get; set; }
-	[property: JsonPropertyName("processes")]
-	public Process[] processes { get; set; }
+	public string Token { get; set; }
+	public Process[] Processes { get; set; }
 };
 
-public struct Process
+public partial class Process
 {
-	[property: JsonPropertyName("name")] 
 	public string Name { get; set; }
-	[property: JsonPropertyName("history")]
 	public ProcessHistory[] History { get; set; }
 };
 
-public struct ProcessHistory
+public partial class ProcessHistory
 {
-	[property: JsonPropertyName("timeStarted")]
 	public string TimeStarted { get; set; }
-	[property: JsonPropertyName("timeEnded")]
 	public string? TimeEnded { get; set; }
 };
 
-
 [JsonSerializable(typeof(Doc))]
+[JsonSerializable(typeof(Process))]
+[JsonSerializable(typeof(ProcessHistory))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 }
