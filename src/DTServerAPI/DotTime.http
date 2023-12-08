@@ -16,21 +16,19 @@ POST {{DotTime_HostAddress}}/process
 X-Api-Version: 1.0.0
 Content-Type: application/json
 {
-  "token": "xxxxx",
-  "version": "1.0.0",
-  "processes": [
-     {
-      "name": "test3",
-      "history": [
-      {
-        "timeStarted": "2022-01-01 00:00:00",
-        "timeEnded": ""
-      }
-     ]
-    }
-  ]
+    "token": "xxxxx",
+    "processes": [
+        {
+            "name": "test3",
+            "history": [
+                {
+                    "timeStarted": "2022-01-01 00:00:00",
+                    "timeEnded": ""
+                }
+            ] 
+        }
+    ]
 }
-
 > {%
     client.test("Request executed successfully", function() {
         client.assert(response.status === 200, "Response status is not 200");
@@ -44,7 +42,6 @@ X-Api-Version: 1.0.0
 Content-Type: application/json
 {
   "token": "xxxxx",
-  "version": "1.0.0",
   "processes": [
     {
       "name": "test3",

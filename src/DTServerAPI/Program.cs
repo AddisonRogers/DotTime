@@ -1,6 +1,7 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
-using MongoDB.Driver;
 using MongoDB.Bson;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -38,30 +39,37 @@ app.MapPost("/process", async delegate(HttpContext context)
 		Console.WriteLine($"Version: {version}");
 
 		var json = await JsonNode.ParseAsync(context.Request.Body);
-		if (json == null) return Results.BadRequest();
+		if (json == null || json["token"] == null || json["processes"] == null) return Results.BadRequest();
 		
 		if (json["processes"] is not JsonArray jsonProcesses) return Results.BadRequest();
 		
-		var filter = Builders<BsonDocument>.Filter.Eq("token", json["Token"]);
+		var filter = Builders<BsonDocument>.Filter.Eq("token", json["token"]!.ToString());
+		var document = await processCollection.Find(filter).FirstOrDefaultAsync();
 		
-		var document = processCollection.Find(filter).FirstOrDefaultAsync().Result;
 		if (document == null) { 
 			Console.WriteLine("Inserting new document");
-			await processCollection.InsertOneAsync(new Doc()
+
+			var bsonDocument = new BsonDocument
 			{
-				Token = json["Token"]?.ToString()!,
-				Processes = jsonProcesses.Select(p => new Process()
-				{
-					Name = p!["Name"]?.ToString()!,
-					History = p!["History"]?.AsArray().Select(h => new ProcessHistory()
+				{ "token", json["token"]?.ToString() },
+				{ "processes", new BsonArray(
+					jsonProcesses.Select(p => new BsonDocument
 					{
-						TimeStarted = h!["TimeStarted"]?.ToString()!,
-						TimeEnded = h["TimeEnded"]?.ToString()!
-					}).ToArray()!
-				}).ToArray()
-			}.ToBsonDocument());
-			return Results.Ok();
-		} // If the document doesn't exist, create a new one TODO fix
+						{ "name", p!["name"]?.ToString() },
+						{ "history", new BsonArray(
+							p["history"]?.AsArray().Select(h => new BsonDocument
+							{
+								{ "timeStarted", h!["timeStarted"]?.ToString() },
+								{ "timeEnded", h["timeEnded"]?.ToString() }
+							})
+						)}
+					}) 
+				)}
+			};
+
+			await processCollection.InsertOneAsync(bsonDocument);
+			return Results.Ok(); 
+		}
 
 		Parallel.ForEach(jsonProcesses, process =>
 		{
@@ -70,27 +78,36 @@ app.MapPost("/process", async delegate(HttpContext context)
 				.FirstOrDefault(p => p["name"].AsString == process?["name"]?.ToString());
 			
 			if (dbProcess == null) {
-				document["processes"].AsBsonArray.Add(process.ToBsonDocument());
+				var jsonObject = JsonDocument.Parse(process!.ToString()); 
+				var bsonDocument = BsonDocument.Parse(jsonObject.RootElement.ToString());
+				document["processes"].AsBsonArray.Add(bsonDocument);
+
 				return;
 			} // If the process doesn't exist, create a new one
 			
-			var lastHistory = dbProcess["history"].AsBsonArray.LastOrDefault() as BsonDocument; // Get the last history entry
+			var lastHistory = dbProcess!["history"].AsBsonArray.LastOrDefault() as BsonDocument; // Get the last history entry
 			
-			if (lastHistory != null
-			    && process?["History"]?[0]?["TimeStarted"]?.ToString() == lastHistory["timeStarted"].AsString
-			    && lastHistory["timeEnded"].AsString == null) lastHistory["timeEnded"] = process?["History"]?[0]?["TimeEnded"]?.ToString();
-			else dbProcess["history"].AsBsonArray.Add(process?["History"]?[0].ToBsonDocument());
+			if (lastHistory != null 
+			    && process?["history"]?[0]?["timeStarted"] != null
+			    && lastHistory.Contains("timeStarted")
+			    && process["history"]?[0]?["timeStarted"]?.ToString() == lastHistory["timeStarted"].AsString
+			    && lastHistory["timeEnded"].AsString == null)
+			lastHistory["timeEnded"] = process["history"]?[0]?["timeEnded"]?.ToString();
+			else {
+				var jsonObject = JsonDocument.Parse(process?["history"]?[0]?.ToString()!); 
+				var bsonDocument = BsonDocument.Parse(jsonObject.RootElement.ToString());
+				dbProcess["history"].AsBsonArray.Add(bsonDocument);
+			}
 		});
 
 		var update = Builders<BsonDocument>.Update
 			.Set("processes", document["processes"]);
-		var opts = new UpdateOptions()
+		var opts = new UpdateOptions
 		{
 			IsUpsert = true
 		};
 		
-		var result = await processCollection.UpdateOneAsync(filter, update, opts);
-		Console.WriteLine($"Updated {result.ModifiedCount} documents");
+		_ = await processCollection.UpdateOneAsync(filter, update, opts);
 
 		return Results.Ok();
 	}
@@ -103,21 +120,3 @@ app.MapPost("/process", async delegate(HttpContext context)
 });
 
 app.Run();
-
-public partial class Doc
-{
-	public required string Token { get; set; }
-	public required Process[] Processes { get; set; }
-};
-
-public partial class Process
-{
-	public required string Name { get; set; }
-	public required ProcessHistory[] History { get; set; }
-};
-
-public partial class ProcessHistory
-{
-	public required string TimeStarted { get; set; }
-	public string? TimeEnded { get; set; }
-};
