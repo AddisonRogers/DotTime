@@ -4,6 +4,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateSlimBuilder(args);
+const int version = 1;
 
 var app = builder.Build();
 IMongoCollection<BsonDocument> processCollection;
@@ -34,14 +35,8 @@ app.MapPost("/process", async delegate(HttpContext context)
 	Console.WriteLine("Received request");
 	try
 	{
-		Console.WriteLine("Received request");
-		var version = context.Request.Headers["X-Api-Version"];
-		Console.WriteLine($"Version: {version}");
-
 		var json = await JsonNode.ParseAsync(context.Request.Body);
-		if (json == null || json["token"] == null || json["processes"] == null) return Results.BadRequest();
-		
-		if (json["processes"] is not JsonArray jsonProcesses) return Results.BadRequest();
+		if (json == null || json["token"] == null || json["processes"] == null || json["processes"] is not JsonArray jsonProcesses) return Results.BadRequest();
 		
 		var filter = Builders<BsonDocument>.Filter.Eq("token", json["token"]!.ToString());
 		var document = await processCollection.Find(filter).FirstOrDefaultAsync();
@@ -68,7 +63,7 @@ app.MapPost("/process", async delegate(HttpContext context)
 			};
 
 			await processCollection.InsertOneAsync(bsonDocument);
-			return Results.Ok(); 
+			return Results.Ok("Inserted new document. \nVersion " + version + "."); 
 		}
 
 		Parallel.ForEach(jsonProcesses, process =>
@@ -85,7 +80,7 @@ app.MapPost("/process", async delegate(HttpContext context)
 				return;
 			} // If the process doesn't exist, create a new one
 			
-			var lastHistory = dbProcess!["history"].AsBsonArray.LastOrDefault() as BsonDocument; // Get the last history entry
+			var lastHistory = dbProcess["history"].AsBsonArray.LastOrDefault() as BsonDocument; // Get the last history entry
 			
 			if (lastHistory != null 
 			    && process?["history"]?[0]?["timeStarted"] != null
@@ -107,15 +102,15 @@ app.MapPost("/process", async delegate(HttpContext context)
 			IsUpsert = true
 		};
 		
-		_ = await processCollection.UpdateOneAsync(filter, update, opts);
-
-		return Results.Ok();
+		await processCollection.UpdateOneAsync(filter, update, opts);
+		Console.WriteLine("Updated a document");
+		return Results.Ok($"Updated. \nVersion: {version})");
 	}
 	catch (Exception ex)
 	{
 		// General error handling
 		Console.WriteLine($"An error occurred: {ex.Message} {ex.StackTrace}");
-		return Results.Problem();
+		return Results.Problem("An error occurred:" + ex.Message + ex.StackTrace + "\nVersion " + version + "\n");
 	}
 });
 
