@@ -9,6 +9,9 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     {
         var counter = 0;
         var processList = new HashSet<Process>();
+        var cache
+        
+        
         while (!stoppingToken.IsCancellationRequested)
         {
             if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
@@ -38,6 +41,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             
             void ProcessExited(object? sender, EventArgs eventArgs, Process process)
             {
+                if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Process {process} exited", process.ProcessName);
+                processList.Remove(process);
                 
             } 
         }
@@ -45,7 +50,6 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     public override Task StopAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
-        
         return base.StopAsync(cancellationToken);
     }
 }
