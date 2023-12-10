@@ -7,8 +7,9 @@ namespace DTService;
 
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
-    private List<string> _ignoreList = null!;
-    
+    private HashSet<string> _ignoreList = null!;
+    private static readonly HttpClient Client = new();
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var counter = 0;
@@ -18,43 +19,51 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         
         try
         {
-            _ignoreList = JsonSerializer.Deserialize<List<string>>(await File.ReadAllTextAsync("ignoreList.json", stoppingToken))!;
+            _ignoreList = JsonSerializer.Deserialize<HashSet<string>>(await File.ReadAllTextAsync("ignoreList.json", stoppingToken))!;
         } catch (Exception error)
         {
             logger.LogError("Error: {error}\n ignoreList.json not found, creating a new one", error.Message);
             _ignoreList = [];
         }
         
+        List<Task> tasks = [];
         while (!stoppingToken.IsCancellationRequested)
         {
             if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-            
-            Parallel.ForEach(Process.GetProcesses(), process =>
+
+            tasks.AddRange(Process.GetProcesses().Select(process => Task.Run(() =>
             {
-                if (!processList.TryAdd(process, true)) return; 
-                try
+                using (process)
                 {
-                    if (_ignoreList!.Contains(process.ProcessName)) return; 
-                    process.EnableRaisingEvents = true; 
-                }
-                catch (Exception error)
-                {
-                    // This occurs when it is a system process
-                    logger.LogError("Error: {error}\n Process {process} cannot be logged :c", error.Message,process.ProcessName);
-                    _ignoreList!.Add(process.ProcessName);
-                    return;
+                    if (_ignoreList!.Contains(process.ProcessName)) return;
+                    if (!processList.TryAdd(process, true)) return;
+                    try
+                    {
+                        process.EnableRaisingEvents = true;
+                    }
+                    catch (Exception error) // This occurs when it is a system process
+                    {
+                        logger.LogError("Error: {error}\n Process {process} cannot be logged :c", error.Message, process.ProcessName);
+                        _ignoreList.Add(process.ProcessName);
+                        return;
+                    }
+
+                    process.Exited += (o, eventArgs) => ProcessExited(o, eventArgs, process);
                 }
 
-                process.Exited += (o, eventArgs) => ProcessExited(o, eventArgs, process);
-            });
+                Task.Delay(Random.Shared.Next(100), stoppingToken);
+            }, stoppingToken)));
             
-            if (counter == 60)
+            try { await Task.WhenAll(tasks); }
+            catch (Exception error)
+            {
+                logger.LogError("Error: {error}\n {stackTrace}", error.Message, error.StackTrace);
+            }
+
+            if (counter == 60 + Random.Shared.Next(0, 60))
             {
                 // Every Minute, send the cache to the server
-                var json = JsonSerializer.Serialize(cache);
-                var url = Environment.GetEnvironmentVariable("DT_URL") ?? throw new Exception("DT_URL not found");
-                var response = await new HttpClient().PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json"), stoppingToken);
-                
+                var response = await Client.PostAsync(Environment.GetEnvironmentVariable("DT_URL") ?? throw new Exception("DT_URL not found"), new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json"), stoppingToken);
                 if (response.IsSuccessStatusCode) logger.LogInformation("Successfully sent data to server");
                 else logger.LogError("Error: {error}\n {response}", response.StatusCode, await response.Content.ReadAsStringAsync(stoppingToken));
                 
@@ -62,10 +71,9 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 cache.Clear();
             } else counter++;
             
-            
-            await Task.Delay(100, stoppingToken);
+            await Task.Delay(10000, stoppingToken);
             continue;
-            
+
             void ProcessExited(object? sender, EventArgs eventArgs, Process process)
             {
                 if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Process {process} exited", process.ProcessName);
@@ -76,6 +84,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                         .Add(new ProcessHistory(process.StartTime, process.ExitTime));
                 
                 processList.TryRemove(process, out _);
+                process.EnableRaisingEvents = false;
             } 
         }
     }
@@ -83,6 +92,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     {
         logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
         File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), cancellationToken);
+        Client.Dispose();
         return base.StopAsync(cancellationToken);
     }
 }
