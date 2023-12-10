@@ -9,7 +9,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 {
     private HashSet<string> _ignoreList = null!;
     private static readonly HttpClient Client = new();
-
+    
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var counter = 0;
@@ -62,6 +62,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 
             if (counter == 60 + Random.Shared.Next(0, 60))
             {
+                await File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), stoppingToken);
                 // Every Minute, send the cache to the server
                 var response = await Client.PostAsync(Environment.GetEnvironmentVariable("DT_URL") ?? throw new Exception("DT_URL not found"), new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json"), stoppingToken);
                 if (response.IsSuccessStatusCode) logger.LogInformation("Successfully sent data to server");
