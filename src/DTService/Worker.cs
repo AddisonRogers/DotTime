@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 
 namespace DTService;
@@ -47,10 +46,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                         _ignoreList.Add(process.ProcessName);
                         return;
                     }
-
-                    process.Exited += (o, eventArgs) => ProcessExited(o, eventArgs, process);
+                    process.Exited += (_, _) => ProcessExited(process);
                 }
-
                 Task.Delay(Random.Shared.Next(100), stoppingToken);
             }, stoppingToken)));
             
@@ -63,19 +60,14 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             if (counter == 60 + Random.Shared.Next(0, 60))
             {
                 await File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), stoppingToken);
-                // Every Minute, send the cache to the server
-                var response = await Client.PostAsync(Environment.GetEnvironmentVariable("DT_URL") ?? throw new Exception("DT_URL not found"), new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json"), stoppingToken);
-                if (response.IsSuccessStatusCode) logger.LogInformation("Successfully sent data to server");
-                else logger.LogError("Error: {error}\n {response}", response.StatusCode, await response.Content.ReadAsStringAsync(stoppingToken));
-                
                 counter = 0;
                 cache.Clear();
             } else counter++;
             
-            await Task.Delay(10000, stoppingToken);
+            await Task.Delay(1000, stoppingToken);
             continue;
 
-            void ProcessExited(object? sender, EventArgs eventArgs, Process process)
+            void ProcessExited(Process process)
             {
                 if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Process {process} exited", process.ProcessName);
                 
@@ -97,4 +89,4 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         return base.StopAsync(cancellationToken);
     }
 }
-public record ProcessHistory(DateTime StartTime, DateTime EndTime);
+public record ProcessHistory(DateTime StartTime, DateTime? EndTime);
