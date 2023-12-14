@@ -66,34 +66,35 @@ app.MapPost("/process", async delegate(HttpContext context)
 			return Results.Ok("Inserted new document. \nVersion " + version + "."); 
 		}
 
-		Parallel.ForEach(jsonProcesses, process =>
+        List<Task> tasks = [];
+		tasks.AddRange(jsonProcesses.Select(process => Task.Run(() =>
 		{
 			var dbProcess = document["processes"].AsBsonArray
 				.Cast<BsonDocument>()
 				.FirstOrDefault(p => p["name"].AsString == process?["name"]?.ToString());
-			
+
 			if (dbProcess == null) {
-				var jsonObject = JsonDocument.Parse(process!.ToString()); 
+				var jsonObject = JsonDocument.Parse(process!.ToString());
 				var bsonDocument = BsonDocument.Parse(jsonObject.RootElement.ToString());
 				document["processes"].AsBsonArray.Add(bsonDocument);
 
 				return;
 			} // If the process doesn't exist, create a new one
-			
+
 			var lastHistory = dbProcess["history"].AsBsonArray.LastOrDefault() as BsonDocument; // Get the last history entry
-			
-			if (lastHistory != null 
-			    && process?["history"]?[0]?["timeStarted"] != null
-			    && lastHistory.Contains("timeStarted")
-			    && process["history"]?[0]?["timeStarted"]?.ToString() == lastHistory["timeStarted"].AsString
-			    && lastHistory["timeEnded"].AsString == null)
-			lastHistory["timeEnded"] = process["history"]?[0]?["timeEnded"]?.ToString();
+
+			if (lastHistory != null
+				&& process?["history"]?[0]?["timeStarted"] != null
+				&& lastHistory.Contains("timeStarted")
+				&& process["history"]?[0]?["timeStarted"]?.ToString() == lastHistory["timeStarted"].AsString
+				&& lastHistory["timeEnded"].AsString == null)
+				lastHistory["timeEnded"] = process["history"]?[0]?["timeEnded"]?.ToString();
 			else {
-				var jsonObject = JsonDocument.Parse(process?["history"]?[0]?.ToString()!); 
+				var jsonObject = JsonDocument.Parse(process?["history"]?[0]?.ToString()!);
 				var bsonDocument = BsonDocument.Parse(jsonObject.RootElement.ToString());
 				dbProcess["history"].AsBsonArray.Add(bsonDocument);
 			}
-		});
+		})));
 
 		var update = Builders<BsonDocument>.Update
 			.Set("processes", document["processes"]);
