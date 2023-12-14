@@ -4,6 +4,14 @@ using System.Text.Json;
 
 namespace DTService;
 
+/*
+ * TODO
+ * RabbitMQ
+ * Update Service. Ie when a new version is available, download it and replace the current one
+ */
+
+
+
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
     private HashSet<string> _ignoreList = null!;
