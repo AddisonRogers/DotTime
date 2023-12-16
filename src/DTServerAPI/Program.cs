@@ -96,6 +96,15 @@ app.MapPost("/process", async delegate(HttpContext context)
 			}
 		})));
 
+		try
+		{
+			await Task.WhenAll(tasks);
+		}
+		catch (Exception error)
+		{
+			Console.WriteLine(error);
+			return Results.Problem("An error occurred:" + error.Message + error.StackTrace + "\nVersion " + version + "\n");
+		}
 		var update = Builders<BsonDocument>.Update
 			.Set("processes", document["processes"]);
 		var opts = new UpdateOptions
