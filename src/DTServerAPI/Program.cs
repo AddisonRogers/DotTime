@@ -60,10 +60,11 @@ app.MapPost("/process", async delegate(HttpContext context)
 						)}
 					}) 
 				)}
-			};
+			}; // God this is ugly
 
 			await processCollection.InsertOneAsync(bsonDocument);
-			return Results.Ok("Inserted new document. \nVersion " + version + "."); 
+			Console.WriteLine("Inserted a document");
+			return Result("Inserted");
 		}
 
         List<Task> tasks = [];
@@ -114,7 +115,9 @@ app.MapPost("/process", async delegate(HttpContext context)
 		
 		await processCollection.UpdateOneAsync(filter, update, opts);
 		Console.WriteLine("Updated a document");
-		return Results.Ok($"Updated. \nVersion: {version})");
+		return Result("Updated");
+
+		IResult Result(string message) => int.Parse(json["version"]?.ToString() ?? "0") < version ? Results.Ok($"UPDATE + {message}") : Results.Ok($"{message} \nVersion: {version})");
 	}
 	catch (Exception ex)
 	{
@@ -122,6 +125,7 @@ app.MapPost("/process", async delegate(HttpContext context)
 		Console.WriteLine($"An error occurred: {ex.Message} {ex.StackTrace}");
 		return Results.Problem("An error occurred:" + ex.Message + ex.StackTrace + "\nVersion " + version + "\n");
 	}
+	
 });
 
 app.Run();

@@ -1,20 +1,16 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace DTService;
 
-/*
- * TODO
- * RabbitMQ
- * Update Service. Ie when a new version is available, download it and replace the current one
- */
-
-
-
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
-    private HashSet<string> _ignoreList = null!;
+    private const int Version = 1; // TODO update this on each release
+    private string _url = "TEMP"; // TODO update this if the server changes
+    private HashSet<string> _ignoreList = null!; // Could this be converted to a frozenSet?
     private static readonly HttpClient Client = new();
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -67,7 +63,20 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 
             if (counter == 60 + Random.Shared.Next(0, 60))
             {
-                await File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), stoppingToken);
+                // Send the data 
+                var json = JsonSerializer.Serialize(cache);
+                await File.WriteAllTextAsync("ignoreList.json", json, stoppingToken); // TODO test
+                var content = new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json");
+                var response = await Client.PostAsync(_url + "/api/processes", content, stoppingToken);
+                if (response.IsSuccessStatusCode)
+                {
+                    if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Successfully sent data to server");
+                    if (response.ReasonPhrase == "UPDATE")
+                }
+                else
+                {
+                    logger.LogError("Error: {error}\n {stackTrace}", response.StatusCode, response.ReasonPhrase);
+                }
                 counter = 0;
                 cache.Clear();
             } else counter++;
