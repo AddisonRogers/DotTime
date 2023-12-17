@@ -17,7 +17,6 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     {
         var counter = 0;
         var processList = new ConcurrentDictionary<Process, bool>();
-        
         var cache = new ConcurrentDictionary<string, List<ProcessHistory>>();
         
         try
@@ -71,7 +70,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 if (response.IsSuccessStatusCode)
                 {
                     if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Successfully sent data to server");
-                    if (response.ReasonPhrase == "UPDATE")
+                    
                 }
                 else
                 {
@@ -79,6 +78,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 }
                 counter = 0;
                 cache.Clear();
+                
+                if (response.ReasonPhrase != null && response.ReasonPhrase[..6] == "UPDATE") await Update();
             } else counter++;
             
             await Task.Delay(1000, stoppingToken);
@@ -104,6 +105,18 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), cancellationToken);
         Client.Dispose();
         return base.StopAsync(cancellationToken);
+    }
+    private async Task Update()
+    {
+        using var httpResponse = await Client.GetAsync($"{_url}/api/update");
+        await File.WriteAllBytesAsync($"DTService-{Version+1}-.exe", await httpResponse.Content.ReadAsByteArrayAsync());
+        Process.Start(new ProcessStartInfo()
+        {
+            FileName = $"DTService-{Version+1}-.exe",
+            WindowStyle = ProcessWindowStyle.Hidden,
+            CreateNoWindow = true,
+        });
+        await StopAsync(new CancellationToken());
     }
 }
 public record ProcessHistory(DateTime StartTime, DateTime? EndTime);
