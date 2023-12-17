@@ -125,7 +125,19 @@ app.MapPost("/process", async delegate(HttpContext context)
 		Console.WriteLine($"An error occurred: {ex.Message} {ex.StackTrace}");
 		return Results.Problem("An error occurred:" + ex.Message + ex.StackTrace + "\nVersion " + version + "\n");
 	}
-	
 });
+app.MapGet("/update", (HttpContext context) =>
+{
+	Console.WriteLine("Received update request");
+	var architecture = context.Request.Query["architecture"].ToString();
+	using var memoryStream = new MemoryStream(File.ReadAllBytes(context.Request.Query["system"].ToString() switch
+	{
+		"windows" => architecture == "arm64" ? @"C:\Users\james\Desktop\test.txt" : @"C:\Users\james\Desktop\test.txt",
+		"linux" => architecture == "arm64" ? @"C:\Users\james\Desktop\test.txt" : @"C:\Users\james\Desktop\test.txt",
+		"macos" => architecture == "x64" ? @"C:\Users\james\Desktop\test.txt" : @"C:\Users\james\Desktop\test.txt",
+		_ => architecture == "arm64" ? @"C:\Users\james\Desktop\test.txt" : @"C:\Users\james\Desktop\test.txt" // Windows is the default
+	}));
+	return memoryStream;
+}); // Look into the podman compose file for the path
 
 app.Run();
