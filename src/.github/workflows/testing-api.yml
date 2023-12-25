@@ -1,0 +1,6 @@
+name: testing-API
+  push: # This will basically for continuous integration (testing)
+    branches: [ main ]
+  pull_request: # also checking for 
+    branches: [ main ]
+  
