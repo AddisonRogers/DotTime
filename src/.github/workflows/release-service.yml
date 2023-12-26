@@ -1,2 +1,36 @@
 name: release-service 
-# this will basically just make a update post req to the server with all of the versions (microservice)
+on: [push]  # Trigger on push events
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '8.x'  # Replace with your desired .NET version
+
+      - name: Install Native AOT tools
+        run: dotnet tool install -g Microsoft.DotNet.Native.AOTCompiler
+
+      - name: Cross-Compile for supported architectures
+        run: |
+          dotnet publish -r linux-x64 -c Release -o out/linux-x64 --self-contained true --native-aot
+          dotnet publish -r osx-x64 -c Release -o out/osx-x64 --self-contained true --native-aot
+          dotnet publish -r win-x64 -c Release -o out/win-x64 --self-contained true --native-aot
+          dotnet publish -r linux-arm64 -c Release -o out/linux-arm64 --self-contained true --native-aot
+          dotnet publish -r osx-arm64 -c Release -o out/osx-arm64 --self-contained true --native-aot
+          dotnet publish -r win-arm64 -c Release -o out/win-arm64 --self-contained true --native-aot
+
+      - name: Package compiled artifacts
+        run: tar -czvf compiled-artifacts.tar.gz out/
+
+      - name: Send POST request with secret
+        run: |
+          curl -X POST \
+               -H "Token: ${{ secrets.THE_SECRET }}" \
+               -F "file=@compiled-artifacts.tar.gz" \
+               ${{ secrets.SERVER_URL }}/api/update

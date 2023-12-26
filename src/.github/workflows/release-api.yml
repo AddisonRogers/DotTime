@@ -1,7 +1,0 @@
-name: release-API
-  release: # This will be for building the docker image
-      types: [created]
-
-  jobs:
-    build:
-      

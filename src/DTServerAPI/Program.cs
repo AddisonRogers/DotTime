@@ -143,7 +143,7 @@ app.MapGet("/update", (HttpContext context) =>
 	}));
 	return memoryStream;
 }); // Look into the podman compose file for the path
-app.MapPost("/update", async delegate(HttpContext context)
+app.MapPost("/update", async delegate(HttpContext context) //TODO fix this lmao
 {
 	using var SKreader = new StreamReader(context.Request.Query["securityKey"].ToString());
 	var body = await SKreader.ReadToEndAsync();
