@@ -1,0 +1,4 @@
+Make the microservice that github can connect to if it needs to
+Make pre-release and pre-package checks for any TODO elements
+Make release and package seperate from each other so that releases are only for the service and the packages are for the API
+Make tests for all of different applications

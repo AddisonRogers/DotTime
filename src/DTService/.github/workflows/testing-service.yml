@@ -1,0 +1,29 @@
+name: testing-service
+on: 
+    push: # This will basically for continuous integration (testing)
+      branches: [ main ]
+    pull_request: # also checking for 
+      branches: [ main ]
+    
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+      steps:
+        - uses: actions/checkout@v4
+        - name: Setup dotnet
+          uses: actions/setup-dotnet@v3
+          with:
+            dotnet-version: '8.0.0'
+        - name: Install dependencies
+          run: dotnet restore
+        - name: Test with dotnet
+          run: dotnet test --logger trx --results-directory "TestResults-'8.0.0'"
+        - name: Upload dotnet test results
+          uses: actions/upload-artifact@v3
+          with:
+            name: dotnet-results-'8.0.0'
+            path: TestResults-'8.0.0'
+          if: ${{ always() }}
