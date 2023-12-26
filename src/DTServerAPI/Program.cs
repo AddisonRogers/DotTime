@@ -134,18 +134,18 @@ app.MapGet("/update", (HttpContext context) =>
 {
 	Console.WriteLine("Received update request");
 	var architecture = context.Request.Query["architecture"].ToString();
-	using var memoryStream = new MemoryStream(File.ReadAllBytes(context.Request.Query["system"].ToString() switch
+	var memoryStream = new MemoryStream(File.ReadAllBytes(context.Request.Query["system"].ToString() switch
 	{
-		"windows" => architecture == "arm64" ? $@"{filePath}/release/win-arm64-{version}.exe" : $@"{filePath}/release/win-x64-{version}.exe",
-		"linux" => architecture == "arm64" ? $@"{filePath}/release/linux-arm64-{version}" : $@"{filePath}/release/linux-x64-{version}",
-		"macos" => architecture == "x64" ? $@"{filePath}/release/macos-x64-{version}.app" : $@"{filePath}/release/macos-arm64-{version}.app",
-		_ => architecture == "arm64" ? $@"{filePath}/release/win-arm64-{version}.exe" : $@"{filePath}/release/win-x64-{version}.exe" // Windows is the default
+		"windows" => architecture == "arm64" ? $"{filePath}/release/win-arm64-{version}.exe" : $"{filePath}/release/win-x64-{version}.exe",
+		"linux" => architecture == "arm64" ? $"{filePath}/release/linux-arm64-{version}" : $"{filePath}/release/linux-x64-{version}",
+		"macos" => architecture == "x64" ? $"{filePath}/release/macos-x64-{version}.app" : $"{filePath}/release/macos-arm64-{version}.app",
+		_ => architecture == "arm64" ? $"{filePath}/release/win-arm64-{version}.exe" : $"{filePath}/release/win-x64-{version}.exe" // Windows is the default
 	}));
 	return memoryStream;
 }); // Look into the podman compose file for the path
 app.MapPost("/update", async delegate(HttpContext context) //TODO fix this lmao
 {
-	using var SKreader = new StreamReader(context.Request.Query["securityKey"].ToString());
+	var SKreader = new StreamReader(context.Request.Query["securityKey"].ToString());
 	var body = await SKreader.ReadToEndAsync();
 	SKreader.Dispose();
 
@@ -153,7 +153,7 @@ app.MapPost("/update", async delegate(HttpContext context) //TODO fix this lmao
 	var securityKey = File.ReadAllText($"{filePath}/sec/the_key.txt");
 	if (body != securityKey) Results.BadRequest("Invalid security key.");
 	
-	using var ms = new MemoryStream();
+	var ms = new MemoryStream();
 	await context.Request.Body.CopyToAsync(ms);
 	await File.WriteAllBytesAsync($"{filePath}/release/{context.Request.Query["system"].ToString()}-{context.Request.Query["architecture"].ToString()}-{version}{context.Request.Query["extension"].ToString()}", ms.ToArray());
 	ms.Dispose();
