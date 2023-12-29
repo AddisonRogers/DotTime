@@ -1,2 +1,47 @@
 ﻿@page "/"
+@rendermode InteractiveAuto
 
+<header>
+    <h1>
+        DotTime
+    </h1>
+    <p>Process management and tracking..</p>
+    <p>
+        <button @onclick="OnClick"></button>
+        <a @onclick="OnClick"><i>Login</i></a>
+        <a @onclick="OnClick"><b>Register</b></a>
+    </p>
+    @if (flag == false)
+    {
+        <div>
+            bunch of text and such @DateTime.Now
+        </div>
+    }else if (flag == true)
+    {
+        <div>
+            bunch of weird text and such @DateTime.Now
+        </div>
+    }
+</header>
+
+
+
+@code{
+    public bool flag { get; set; } = false;
+
+    protected override Task OnInitializedAsync()
+    {
+        Console.WriteLine("Initialized");
+        flag = false;
+        return base.OnInitializedAsync();
+    }
+    
+    public Task OnClick()
+    {
+        Console.WriteLine("Clicked");
+        flag = true;
+        return Task.CompletedTask;
+    }
+}
+<!-- Big graph about the statistics across the platform -->
+    
