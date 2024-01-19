@@ -4,17 +4,13 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 
 var builder = WebApplication.CreateSlimBuilder(args);
-const string version = "1.0.0";
-string? filePath;
+const int version = 1;
 
 var app = builder.Build();
 IMongoCollection<BsonDocument> processCollection;
 
 try
 {
-	filePath = Environment.GetEnvironmentVariable("UPDATE_KEY_FILE");
-	if (filePath == null) throw new Exception("UPDATE_KEY_FILE environment variable not set.");
-	
 	var gettingData = Task.Run(() =>
 	{
 		var client = new MongoClient("mongodb://localhost:27017");
@@ -121,7 +117,7 @@ app.MapPost("/process", async delegate(HttpContext context)
 		Console.WriteLine("Updated a document");
 		return Result("Updated");
 
-		IResult Result(string message) => int.Parse(json["version"]?.ToString() ?? "0") < int.Parse(version) ? Results.Ok($"UPDATE + {message}") : Results.Ok($"{message} \nVersion: {version})");
+		IResult Result(string message) => int.Parse(json["version"]?.ToString() ?? "0") < version ? Results.Ok($"UPDATE + {message}") : Results.Ok($"{message} \nVersion: {version})");
 	}
 	catch (Exception ex)
 	{
@@ -130,33 +126,13 @@ app.MapPost("/process", async delegate(HttpContext context)
 		return Results.Problem("An error occurred:" + ex.Message + ex.StackTrace + "\nVersion " + version + "\n");
 	}
 });
-app.MapGet("/update", (HttpContext context) =>
+app.MapGet("/update", async delegate (HttpContext context)
 {
 	Console.WriteLine("Received update request");
-	var architecture = context.Request.Query["architecture"].ToString();
-	var memoryStream = new MemoryStream(File.ReadAllBytes(context.Request.Query["system"].ToString() switch
-	{
-		"windows" => architecture == "arm64" ? $"{filePath}/release/win-arm64-{version}.exe" : $"{filePath}/release/win-x64-{version}.exe",
-		"linux" => architecture == "arm64" ? $"{filePath}/release/linux-arm64-{version}" : $"{filePath}/release/linux-x64-{version}",
-		"macos" => architecture == "x64" ? $"{filePath}/release/macos-x64-{version}.app" : $"{filePath}/release/macos-arm64-{version}.app",
-		_ => architecture == "arm64" ? $"{filePath}/release/win-arm64-{version}.exe" : $"{filePath}/release/win-x64-{version}.exe" // Windows is the default
-	}));
-	return memoryStream;
-}); // Look into the podman compose file for the path
-app.MapPost("/update", async delegate(HttpContext context) //TODO fix this lmao
-{
-	var SKreader = new StreamReader(context.Request.Query["securityKey"].ToString());
-	var body = await SKreader.ReadToEndAsync();
-	SKreader.Dispose();
 
-	if (!File.Exists($"{filePath}/sec/the_key.txt")) throw new FileNotFoundException($"The file {filePath} does not exist.");
-	var securityKey = File.ReadAllText($"{filePath}/sec/the_key.txt");
-	if (body != securityKey) Results.BadRequest("Invalid security key.");
-	
-	var ms = new MemoryStream();
-	await context.Request.Body.CopyToAsync(ms);
-	await File.WriteAllBytesAsync($"{filePath}/release/{context.Request.Query["system"].ToString()}-{context.Request.Query["architecture"].ToString()}-{version}{context.Request.Query["extension"].ToString()}", ms.ToArray());
-	ms.Dispose();
-});
+	var architecture = context.Request.Query["architecture"].ToString();
+	var system = context.Request.Query["system"].ToString();
+	return new MemoryStream(await File.ReadAllBytesAsync($"/{system}-{architecture}.bytes"));
+}); 
 
 app.Run();
