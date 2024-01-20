@@ -8,7 +8,7 @@ namespace DTService;
 
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
-    private const int Version = 1; // TODO update this on each release
+    //private const int Version = 1; // TODO update this on each release
     private string _url = "TEMP"; // TODO update this if the server changes
     private HashSet<string> _ignoreList = null!; // Could this be converted to a frozenSet?
     private static readonly HttpClient Client = new();
