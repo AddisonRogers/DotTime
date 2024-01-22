@@ -35,6 +35,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         List<Task> tasks = [];
         while (!stoppingToken.IsCancellationRequested)
         {
+            await Task.Delay(1000, stoppingToken);
             if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
             var processArray = Process.GetProcesses(); // Array allocation as otherwise there is a memory leak
             tasks.AddRange(processArray.Select(process => Task.Run(() => 
@@ -53,7 +54,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                         _ignoreList.Add(process.ProcessName);
                         return;
                     }
-                    process.Exited += (_, _) => ProcessExited(process);
+                    process.Exited += (_, _) => ProcessExited(process, cache, processList);
                 }
                 Task.Delay(Random.Shared.Next(100), stoppingToken);
             }, stoppingToken)));
@@ -64,66 +65,68 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 logger.LogError("Error: {error}\n {stackTrace}", error.Message, error.StackTrace);
             }
 
-            if (counter == 60 + Random.Shared.Next(0, 60))
-            {
-                try
-                {
-                    Ping myPing = new();
-                    var reply = await myPing.SendPingAsync(Url, 1000);
-                    logger.LogInformation($"Status : {reply.Status}\nTime : {reply.RoundtripTime}\nAddress : {reply.Address}");
-                    // Send the data 
-                    var json = JsonSerializer.Serialize(cache);
-                    await File.WriteAllTextAsync("ignoreList.json", json, stoppingToken); // TODO test
-                    var content = new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json");
-                    var response = await Client.PostAsync(Url + "/process", content, stoppingToken);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        if (logger.IsEnabled(LogLevel.Information))
-                            logger.LogInformation("Successfully sent data to server");
-                    }
-                    else
-                    {
-                        logger.LogError("Error: {error}\n {stackTrace}", response.StatusCode, response.ReasonPhrase);
-                    }
-
-                    cache.Clear();
-
-                    if (response.ReasonPhrase != null && response.ReasonPhrase[..6] == "UPDATE") await Update();
-                }
-                catch (PingException e)
-                {
-                    logger.LogError("Error sending the cache \n" +
-                                    "This is due to the server being down briefly. If it keeps occuring please message dotracc\n" +
-                                    "-> {error}\n {stackTrace}", e.Message, e.StackTrace);
-                }
-                
-                catch (Exception e)
-                {
-                    logger.LogError("Error sending the cache \n" +
-                                    "If it keeps occuring please message dotracc\n" +
-                                    "-> {error}\n {stackTrace}", e.Message, e.StackTrace);
-                }
-                
-                counter = 0;
-            } else counter++;
+            counter++;
+            if (counter < (60 + Random.Shared.Next(0, 60))) continue;
+            if (cache.Keys.Count == 0) continue;
+            counter = 0;
             
-            await Task.Delay(1000, stoppingToken);
-            continue;
-
-            void ProcessExited(Process process)
-            {
-                if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Process {process} exited", process.ProcessName);
-                
-                (cache.TryGetValue(process.ProcessName, out var value) 
-                        ? value 
-                        : cache[process.ProcessName] = [])
-                        .Add(new ProcessHistory(process.StartTime, process.ExitTime));
-                
-                processList.TryRemove(process, out _);
-                process.EnableRaisingEvents = false;
-            } 
+            await SendData(stoppingToken, cache);
         }
     }
+
+    private async Task SendData(CancellationToken stoppingToken, ConcurrentDictionary<string, List<ProcessHistory>> cache)
+    {
+        try
+        {
+            await PingAndLogAsync();
+        }
+        catch (PingException e)
+        {
+            logger.LogError("Error due to server not up\nError: {error}\n {stackTrace}", e.Message, e.StackTrace);
+        }
+        catch (Exception e)
+        {
+            logger.LogError("Error: {error}\n {stackTrace}", e.Message, e.StackTrace);
+        }
+        var json = JsonSerializer.Serialize(cache);
+        Console.WriteLine(json);
+        await File.WriteAllTextAsync("ignoreList.json", json, stoppingToken); // TODO test
+        var content = new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json");
+        Console.WriteLine(content);
+        var response = await Client.PostAsync(Url + "/process", content, stoppingToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogError("Cannot send data to the server. \nError: {error}\n {stackTrace}", response.StatusCode, response.ReasonPhrase);
+            return;
+        }
+        if (logger.IsEnabled(LogLevel.Information))
+                logger.LogInformation("Successfully sent data to server");
+        
+        cache.Clear();
+
+        if (response.ReasonPhrase != null && response.ReasonPhrase[..6] == "UPDATE") await Update();
+    }
+
+    private async Task PingAndLogAsync()
+    {
+        Ping myPing = new();
+        var reply = await myPing.SendPingAsync(Url, 1000);
+        logger.LogInformation($"Status : {reply.Status}\nTime : {reply.RoundtripTime}\nAddress : {reply.Address}");
+    }
+
+    private void ProcessExited(Process process, ConcurrentDictionary<string, List<ProcessHistory>> cache, ConcurrentDictionary<Process, bool> processList)
+    {
+        if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Process {process} exited", process.ProcessName);
+                
+        (cache.TryGetValue(process.ProcessName, out var value) 
+                ? value 
+                : cache[process.ProcessName] = [])
+            .Add(new ProcessHistory(process.StartTime, process.ExitTime));
+                
+        processList.TryRemove(process, out _);
+        process.EnableRaisingEvents = false;
+    }
+    
     public override Task StopAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
@@ -131,6 +134,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         Client.Dispose();
         return base.StopAsync(cancellationToken);
     }
+    
     private async Task Update()
     {
         using var httpResponse = await Client.GetAsync($"{Url}/update");
@@ -144,4 +148,5 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         await StopAsync(new CancellationToken());
     }
 }
+
 public record ProcessHistory(DateTime StartTime, DateTime? EndTime);
