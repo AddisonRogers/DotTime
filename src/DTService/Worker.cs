@@ -36,8 +36,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-            var processArray = Process.GetProcesses();
-            tasks.AddRange(processArray.Select(process => Task.Run(() => // Replaced with an array
+            var processArray = Process.GetProcesses(); // Array allocation as otherwise there is a memory leak
+            tasks.AddRange(processArray.Select(process => Task.Run(() => 
             {
                 using (process)
                 {
@@ -68,7 +68,6 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             {
                 try
                 {
-                    
                     Ping myPing = new();
                     var reply = await myPing.SendPingAsync(Url, 1000);
                     logger.LogInformation($"Status : {reply.Status}\nTime : {reply.RoundtripTime}\nAddress : {reply.Address}");
@@ -136,7 +135,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     {
         using var httpResponse = await Client.GetAsync($"{Url}/update");
         await File.WriteAllBytesAsync($"DTService-{Version+1}-.exe", Convert.FromBase64String(await httpResponse.Content.ReadAsStringAsync()));
-        Process.Start(new ProcessStartInfo()
+        Process.Start(new ProcessStartInfo
         {
             FileName = $"DTService-{Version+1}-.exe",
             WindowStyle = ProcessWindowStyle.Hidden,
