@@ -115,8 +115,7 @@ app.MapPost("/process", async delegate(HttpContext context)
         catch (Exception error)
         {
             Console.WriteLine(error);
-            return Results.Problem("An error occurred:" + error.Message + error.StackTrace + "\nVersion " + version +
-                                   "\n");
+            return Results.Problem("An error occurred:" + error.Message + error.StackTrace + "\nVersion " + version + "\n");
         }
 
         var update = Builders<BsonDocument>.Update
@@ -148,9 +147,15 @@ app.MapGet("/update", async delegate(HttpContext context)
 {
     Console.WriteLine("Received update request");
 
-    var architecture = context.Request.Query["architecture"].ToString();
-    var system = context.Request.Query["system"].ToString();
-    return new MemoryStream(await File.ReadAllBytesAsync($"/{system}-{architecture}.bytes"));
+    var architecture = string.IsNullOrEmpty(context.Request.Query["architecture"].ToString()) 
+        ? "x86_64" 
+        : context.Request.Query["architecture"].ToString();    
+    
+    var system = string.IsNullOrEmpty(context.Request.Query["system"].ToString()) 
+        ? "windows" 
+        : context.Request.Query["system"].ToString();    
+    
+    return Convert.ToBase64String(await File.ReadAllBytesAsync(Environment.CurrentDirectory + $"/files/{system}-{architecture}.bytes"));
 });
 
 app.Run();

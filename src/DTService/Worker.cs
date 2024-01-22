@@ -1,16 +1,16 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace DTService;
 
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
-    //private const int Version = 1; // TODO update this on each release
-    private string _url = "TEMP"; // TODO update this if the server changes
-    private HashSet<string> _ignoreList = null!; // Could this be converted to a frozenSet?
+    private const int Version = 1; // TODO update this on each release
+    private const string Url = "http://localhost:5171"; // TODO update this if the server changes
+    private HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
     private static readonly HttpClient Client = new();
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -21,10 +21,14 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         
         try
         {
+            if (!File.Exists("ignoreList.json")) throw new Exception("ignoreList.json does not exist");
             _ignoreList = JsonSerializer.Deserialize<HashSet<string>>(await File.ReadAllTextAsync("ignoreList.json", stoppingToken))!;
-        } catch (Exception error)
+            Console.WriteLine("Loaded ignoreList.json");
+        } 
+        catch (Exception error)
         {
             logger.LogError("Error: {error}\n ignoreList.json not found, creating a new one", error.Message);
+            File.Create("ignoreList.json");
             _ignoreList = [];
         }
         
@@ -32,8 +36,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-
-            tasks.AddRange(Process.GetProcesses().Select(process => Task.Run(() =>
+            var processArray = Process.GetProcesses();
+            tasks.AddRange(processArray.Select(process => Task.Run(() => // Replaced with an array
             {
                 using (process)
                 {
@@ -62,24 +66,46 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 
             if (counter == 60 + Random.Shared.Next(0, 60))
             {
-                // Send the data 
-                var json = JsonSerializer.Serialize(cache);
-                await File.WriteAllTextAsync("ignoreList.json", json, stoppingToken); // TODO test
-                var content = new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json");
-                var response = await Client.PostAsync(_url + "/api/processes", content, stoppingToken);
-                if (response.IsSuccessStatusCode)
+                try
                 {
-                    if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Successfully sent data to server");
                     
+                    Ping myPing = new();
+                    var reply = await myPing.SendPingAsync(Url, 1000);
+                    logger.LogInformation($"Status : {reply.Status}\nTime : {reply.RoundtripTime}\nAddress : {reply.Address}");
+                    // Send the data 
+                    var json = JsonSerializer.Serialize(cache);
+                    await File.WriteAllTextAsync("ignoreList.json", json, stoppingToken); // TODO test
+                    var content = new StringContent(JsonSerializer.Serialize(cache), Encoding.UTF8, "application/json");
+                    var response = await Client.PostAsync(Url + "/process", content, stoppingToken);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        if (logger.IsEnabled(LogLevel.Information))
+                            logger.LogInformation("Successfully sent data to server");
+                    }
+                    else
+                    {
+                        logger.LogError("Error: {error}\n {stackTrace}", response.StatusCode, response.ReasonPhrase);
+                    }
+
+                    cache.Clear();
+
+                    if (response.ReasonPhrase != null && response.ReasonPhrase[..6] == "UPDATE") await Update();
                 }
-                else
+                catch (PingException e)
                 {
-                    logger.LogError("Error: {error}\n {stackTrace}", response.StatusCode, response.ReasonPhrase);
+                    logger.LogError("Error sending the cache \n" +
+                                    "This is due to the server being down briefly. If it keeps occuring please message dotracc\n" +
+                                    "-> {error}\n {stackTrace}", e.Message, e.StackTrace);
                 }
-                counter = 0;
-                cache.Clear();
                 
-                if (response.ReasonPhrase != null && response.ReasonPhrase[..6] == "UPDATE") await Update();
+                catch (Exception e)
+                {
+                    logger.LogError("Error sending the cache \n" +
+                                    "If it keeps occuring please message dotracc\n" +
+                                    "-> {error}\n {stackTrace}", e.Message, e.StackTrace);
+                }
+                
+                counter = 0;
             } else counter++;
             
             await Task.Delay(1000, stoppingToken);
@@ -108,8 +134,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     }
     private async Task Update()
     {
-        using var httpResponse = await Client.GetAsync($"{_url}/api/update");
-        await File.WriteAllBytesAsync($"DTService-{Version+1}-.exe", await httpResponse.Content.ReadAsByteArrayAsync());
+        using var httpResponse = await Client.GetAsync($"{Url}/update");
+        await File.WriteAllBytesAsync($"DTService-{Version+1}-.exe", Convert.FromBase64String(await httpResponse.Content.ReadAsStringAsync()));
         Process.Start(new ProcessStartInfo()
         {
             FileName = $"DTService-{Version+1}-.exe",
