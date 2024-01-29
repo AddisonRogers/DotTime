@@ -10,26 +10,25 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 {
     private const int Version = 1; // TODO update this on each release
     private const string Url = "http://localhost:5171"; // TODO update this if the server changes
-    private HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
+    private static HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
     private static readonly HttpClient Client = new();
+    private static ConcurrentDictionary<Process, bool> _processList = new();
+    private static ConcurrentDictionary<string, List<ProcessHistory>> _cache = new();
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var counter = 0;
-        var processList = new ConcurrentDictionary<Process, bool>();
-        var cache = new ConcurrentDictionary<string, List<ProcessHistory>>();
         
-        try
+        if (!File.Exists("ignoreList.json"))
         {
-            if (!File.Exists("ignoreList.json")) throw new Exception("ignoreList.json does not exist");
-            _ignoreList = JsonSerializer.Deserialize<HashSet<string>>(await File.ReadAllTextAsync("ignoreList.json", stoppingToken))!;
-            Console.WriteLine("Loaded ignoreList.json");
-        } 
-        catch (Exception error)
-        {
-            logger.LogError("Error: {error}\n ignoreList.json not found, creating a new one", error.Message);
+            logger.LogError("Error: {error}\n ignoreList.json not found, creating a new one");
             File.Create("ignoreList.json");
             _ignoreList = [];
+        }
+        else
+        {
+            _ignoreList = JsonSerializer.Deserialize<HashSet<string>>(await File.ReadAllTextAsync("ignoreList.json", stoppingToken))!;
+            logger.LogInformation("Deserialized ignoreList");
         }
         
         List<Task> tasks = [];
@@ -43,7 +42,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 using (process)
                 {
                     if (_ignoreList!.Contains(process.ProcessName)) return;
-                    if (!processList.TryAdd(process, true)) return;
+                    if (!_processList.TryAdd(process, true)) return;
                     try
                     {
                         process.EnableRaisingEvents = true;
@@ -54,7 +53,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                         _ignoreList.Add(process.ProcessName);
                         return;
                     }
-                    process.Exited += (_, _) => ProcessExited(process, cache, processList);
+                    process.Exited += (_, _) => ProcessExited(process, _cache, _processList);
                 }
                 Task.Delay(Random.Shared.Next(100), stoppingToken);
             }, stoppingToken)));
@@ -67,10 +66,10 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 
             counter++;
             if (counter < (60 + Random.Shared.Next(0, 60))) continue;
-            if (cache.Keys.Count == 0) continue;
+            if (_cache.Keys.Count == 0) continue;
             counter = 0;
             
-            await SendData(stoppingToken, cache);
+            await SendData(stoppingToken, _cache);
         }
     }
 
