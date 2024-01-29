@@ -10,7 +10,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 {
     private const int Version = 1; // TODO update this on each release
     private const string Url = "http://localhost:5171"; // TODO update this if the server changes
-    private static HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
+    //private static HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
     private static readonly HttpClient Client = new();
     private static ConcurrentDictionary<Process, bool> _processList = new();
     private static ConcurrentDictionary<string, List<ProcessHistory>> _cache = new();
@@ -18,7 +18,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var counter = 0;
-        
+
+        /*
         if (!File.Exists("ignoreList.json"))
         {
             logger.LogError("Error: {error}\n ignoreList.json not found, creating a new one");
@@ -27,37 +28,21 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         }
         else
         {
-            _ignoreList = JsonSerializer.Deserialize<HashSet<string>>(await File.ReadAllTextAsync("ignoreList.json", stoppingToken))!;
+            var text = await File.ReadAllTextAsync("ignoreList.json", stoppingToken);
+            if (text == "null")
+            //_ignoreList = JsonSerializer.Deserialize<HashSet<string>>(text)!;
             logger.LogInformation("Deserialized ignoreList");
         }
-        
+        */
+
         List<Task> tasks = [];
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(1000, stoppingToken);
+            //await Task.Delay(1000, stoppingToken);
+            Thread.Sleep(1000);
             if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
             var processArray = Process.GetProcesses(); // Array allocation as otherwise there is a memory leak
-            tasks.AddRange(processArray.Select(process => Task.Run(() => 
-            {
-                using (process)
-                {
-                    if (_ignoreList!.Contains(process.ProcessName)) return;
-                    if (!_processList.TryAdd(process, true)) return;
-                    try
-                    {
-                        process.EnableRaisingEvents = true;
-                    }
-                    catch (Exception error) // This occurs when it is a system process
-                    {
-                        logger.LogError("Error: {error}\n Process {process} cannot be logged :c", error.Message, process.ProcessName);
-                        _ignoreList.Add(process.ProcessName);
-                        return;
-                    }
-                    process.Exited += (_, _) => ProcessExited(process, _cache, _processList);
-                }
-                Task.Delay(Random.Shared.Next(100), stoppingToken);
-            }, stoppingToken)));
-            
+            tasks.AddRange(processArray.Select(process => Task.Run(() => ProcessHandler(process), stoppingToken)));
             try { await Task.WhenAll(tasks); }
             catch (Exception error)
             {
@@ -70,6 +55,29 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             counter = 0;
             
             await SendData(stoppingToken, _cache);
+        }
+    }
+
+    private void ProcessHandler(Process process)
+    {
+        using (process)
+        {
+            //if (_ignoreList!.Contains(process.ProcessName)) return;
+            if (!_processList.TryAdd(process, true)) return;
+            try
+            {
+                process.EnableRaisingEvents = true;
+            }
+            catch (Exception error) // This occurs when it is a system process
+            {
+                //logger.LogError("Error: {error}\n Process {process} cannot be logged :c", error.Message, process.ProcessName);
+                //_ignoreList.Add(process.ProcessName); // TODO Still log via the backup method
+                return;
+            }
+
+
+            process.Exited += (_, _) => ProcessExited(process, _cache, _processList); // TODO FIX
+            process.WaitForExit();
         }
     }
 
@@ -119,17 +127,17 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 
         (cache.TryGetValue(process.ProcessName, out var value) 
                 ? value 
-                : cache[process.ProcessName] = [])
+                : cache[process.ProcessName] = new List<ProcessHistory>())
             .Add(new ProcessHistory(process.StartTime, process.ExitTime));
                 
         processList.TryRemove(process, out _);
         process.EnableRaisingEvents = false;
-    }
+    } // TODO FIX
     
     public override Task StopAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
-        File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), cancellationToken);
+        //File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), cancellationToken);
         Client.Dispose();
         return base.StopAsync(cancellationToken);
     }
