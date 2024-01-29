@@ -12,7 +12,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     private const string Url = "http://localhost:5171"; // TODO update this if the server changes
     //private static HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
     private static readonly HttpClient Client = new();
-    private static ConcurrentDictionary<Process, bool> _processList = new();
+    private static HashSet<Process> _processList = new();
     private static ConcurrentDictionary<string, List<ProcessHistory>> _cache = new();
     
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -41,14 +41,22 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             //await Task.Delay(1000, stoppingToken);
             Thread.Sleep(1000);
             if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-            var processArray = Process.GetProcesses(); // Array allocation as otherwise there is a memory leak
-            tasks.AddRange(processArray.Select(process => Task.Run(() => ProcessHandler(process), stoppingToken)));
+
+            var processArray = Process.GetProcesses();
+
+            tasks.AddRange(processArray.Select(process =>
+            {
+                return !_processList.Add(process) ? Task.Run(() => ProcessHandler(process), stoppingToken) : null;
+            })!);
+
+
+            /*
             try { await Task.WhenAll(tasks); }
             catch (Exception error)
             {
                 logger.LogError("Error: {error}\n {stackTrace}", error.Message, error.StackTrace);
             }
-
+            */
             counter++;
             if (counter < (60 + Random.Shared.Next(0, 60))) continue;
             if (_cache.Keys.Count == 0) continue;
@@ -63,7 +71,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         using (process)
         {
             //if (_ignoreList!.Contains(process.ProcessName)) return;
-            if (!_processList.TryAdd(process, true)) return;
+            if (!_processList.Add(process)) return;
             try
             {
                 process.EnableRaisingEvents = true;
@@ -121,7 +129,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         logger.LogInformation($"Status : {reply.Status}\nTime : {reply.RoundtripTime}\nAddress : {reply.Address}");
     }
 
-    private void ProcessExited(Process process, ConcurrentDictionary<string, List<ProcessHistory>> cache, ConcurrentDictionary<Process, bool> processList)
+    private void ProcessExited(Process process, ConcurrentDictionary<string, List<ProcessHistory>> cache, HashSet<Process> processList)
     {
         if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Process {process} exited", process.ProcessName);
                 
@@ -129,9 +137,9 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 ? value 
                 : cache[process.ProcessName] = new List<ProcessHistory>())
             .Add(new ProcessHistory(process.StartTime, process.ExitTime));
-                
-        processList.TryRemove(process, out _);
-        process.EnableRaisingEvents = false;
+
+        processList.Remove(process);
+        //process.EnableRaisingEvents = false;
     } // TODO FIX
     
     public override Task StopAsync(CancellationToken cancellationToken)
