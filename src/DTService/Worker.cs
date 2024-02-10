@@ -6,60 +6,57 @@ using System.Text.Json;
 
 namespace DTService;
 
-public class Worker(ILogger<Worker> logger) : BackgroundService
+public class Worker : BackgroundService
 {
+    private static HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
+    private static readonly HttpClient Client = new();
+    private static HashSet<Process> _processList = new(); // List of all the processes currently running
+    private static ConcurrentDictionary<string, List<ProcessHistory>> _cache = new(); // 
+    private readonly ILogger<Worker> _logger;
+    private readonly IConfiguration _configuration;
     private const int Version = 1; // TODO update this on each release
     private const string Url = "http://localhost:5171"; // TODO update this if the server changes
-    //private static HashSet<string> _ignoreList = null!; // TODO change this to a frozenSet
-    private static readonly HttpClient Client = new();
-    private static HashSet<Process> _processList = new();
-    private static ConcurrentDictionary<string, List<ProcessHistory>> _cache = new();
-    
+
+    public Worker(ILogger<Worker> logger, IConfiguration configuration)
+    {
+        _logger = logger;
+        _configuration = configuration;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var counter = 0;
-
-        /*
-        if (!File.Exists("ignoreList.json"))
+        
+        if (File.Exists("ignoreList.json"))
         {
-            logger.LogError("Error: {error}\n ignoreList.json not found, creating a new one");
-            File.Create("ignoreList.json");
-            _ignoreList = [];
+            var text = await File.ReadAllTextAsync("ignoreList.json", stoppingToken);
+            if (text == "null") _ignoreList = [];
+            
+            _ignoreList = JsonSerializer.Deserialize<HashSet<string>>(text)!;
+            _logger.LogInformation("Deserialized ignoreList");
         }
         else
         {
-            var text = await File.ReadAllTextAsync("ignoreList.json", stoppingToken);
-            if (text == "null")
-            //_ignoreList = JsonSerializer.Deserialize<HashSet<string>>(text)!;
-            logger.LogInformation("Deserialized ignoreList");
+            _logger.LogError("Error: {error}\n ignoreList.json not found, creating a new one");
+            File.Create("ignoreList.json");
+            _ignoreList = [];
         }
-        */
-
+        
         List<Task> tasks = [];
         while (!stoppingToken.IsCancellationRequested)
         {
-            //await Task.Delay(1000, stoppingToken);
             Thread.Sleep(1000);
-            if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+            if (_logger.IsEnabled(LogLevel.Information)) _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 
             var processArray = Process.GetProcesses();
-
             tasks.AddRange(processArray.Select(process =>
             {
+                // If the process isn't in processList hashset then call Process Handler on it
                 return !_processList.Add(process) ? Task.Run(() => ProcessHandler(process), stoppingToken) : null;
             })!);
-
-
-            /*
-            try { await Task.WhenAll(tasks); }
-            catch (Exception error)
-            {
-                logger.LogError("Error: {error}\n {stackTrace}", error.Message, error.StackTrace);
-            }
-            */
+            
             counter++;
-            if (counter < (60 + Random.Shared.Next(0, 60))) continue;
-            if (_cache.Keys.Count == 0) continue;
+            if (counter < 60 + Random.Shared.Next(0, 60) || _cache.Keys.Count == 0) continue; // random increment
             counter = 0;
             
             await SendData(stoppingToken, _cache);
@@ -70,7 +67,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     {
         using (process)
         {
-            //if (_ignoreList!.Contains(process.ProcessName)) return;
+            if (_ignoreList!.Contains(process.ProcessName)) return;
             if (!_processList.Add(process)) return;
             try
             {
@@ -78,12 +75,11 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             }
             catch (Exception error) // This occurs when it is a system process
             {
-                //logger.LogError("Error: {error}\n Process {process} cannot be logged :c", error.Message, process.ProcessName);
-                //_ignoreList.Add(process.ProcessName); // TODO Still log via the backup method
+                _logger.LogError("Error: {error}\n Process {process} cannot be logged :c", error.Message, process.ProcessName);
+                _ignoreList.Add(process.ProcessName); // TODO Still log via the backup method
                 return;
             }
-
-
+            
             process.Exited += (_, _) => ProcessExited(process, _cache, _processList); // TODO FIX
             process.WaitForExit();
         }
@@ -97,11 +93,11 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         }
         catch (PingException e)
         {
-            logger.LogError("Error due to server not up\nError: {error}\n {stackTrace}", e.Message, e.StackTrace);
+            _logger.LogError("Error due to server not up\nError: {error}\n {stackTrace}", e.Message, e.StackTrace);
         }
         catch (Exception e)
         {
-            logger.LogError("Error: {error}\n {stackTrace}", e.Message, e.StackTrace);
+            _logger.LogError("Error: {error}\n {stackTrace}", e.Message, e.StackTrace);
         }
         var json = JsonSerializer.Serialize(cache);
         Console.WriteLine(json);
@@ -111,11 +107,11 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
         var response = await Client.PostAsync(Url + "/process", content, stoppingToken);
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogError("Cannot send data to the server. \nError: {error}\n {stackTrace}", response.StatusCode, response.ReasonPhrase);
+            _logger.LogError("Cannot send data to the server. \nError: {error}\n {stackTrace}", response.StatusCode, response.ReasonPhrase);
             return;
         }
-        if (logger.IsEnabled(LogLevel.Information))
-                logger.LogInformation("Successfully sent data to server");
+        if (_logger.IsEnabled(LogLevel.Information))
+                _logger.LogInformation("Successfully sent data to server");
         
         cache.Clear();
 
@@ -126,12 +122,12 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
     {
         Ping myPing = new();
         var reply = await myPing.SendPingAsync(Url, 1000);
-        logger.LogInformation($"Status : {reply.Status}\nTime : {reply.RoundtripTime}\nAddress : {reply.Address}");
+        _logger.LogInformation($"Status : {reply.Status}\nTime : {reply.RoundtripTime}\nAddress : {reply.Address}");
     }
 
     private void ProcessExited(Process process, ConcurrentDictionary<string, List<ProcessHistory>> cache, HashSet<Process> processList)
     {
-        if (logger.IsEnabled(LogLevel.Information)) logger.LogInformation("Process {process} exited", process.ProcessName);
+        if (_logger.IsEnabled(LogLevel.Information)) _logger.LogInformation("Process {process} exited", process.ProcessName);
                 
         (cache.TryGetValue(process.ProcessName, out var value) 
                 ? value 
@@ -139,13 +135,13 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             .Add(new ProcessHistory(process.StartTime, process.ExitTime));
 
         processList.Remove(process);
-        //process.EnableRaisingEvents = false;
+        process.EnableRaisingEvents = false;
     } // TODO FIX
     
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
-        //File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), cancellationToken);
+        _logger.LogInformation("Worker stopped at: {time}", DateTimeOffset.Now);
+        File.WriteAllTextAsync("ignoreList.json", JsonSerializer.Serialize(_ignoreList), cancellationToken);
         Client.Dispose();
         return base.StopAsync(cancellationToken);
     }
