@@ -9,17 +9,20 @@ import (
 
 func main() {
 
-	for {
-		processList := make(map[int]string)
+	processList := make(map[int]string)
 
+	for {
+		// Get the current system processes
 		processes, err := ps.Processes()
 		checkErr(err)
 
+		// Prepare a map of the current processes
 		processMap := make(map[int]string)
 		for _, process := range processes {
 			processMap[process.Pid()] = process.Executable()
 		}
 
+		// Compare the current process map with the previous one
 		if !isSubset(processList, processMap) {
 			newProcesses := difference(processMap, processList)
 			stoppedProcesses := difference(processList, processMap)
@@ -27,14 +30,21 @@ func main() {
 			fmt.Printf("Stopped processes: %v\n", stoppedProcesses)
 		}
 
-		for _, process := range processes {
-			//fmt.Printf("PID: %d, Name: %s\n", process.Pid(), process.Executable())
-			// Add the process information to the map
-			if _, exists := processMap[process.Pid()]; !exists {
-				processMap[process.Pid()] = process.Executable()
+		/*
+			for _, process := range processes {
+
+				//fmt.Printf("PID: %d, Name: %s\n", process.Pid(), process.Executable())
+
+				// Add the process information to the map
+				if _, exists := processMap[process.Pid()]; !exists {
+					processMap[process.Pid()] = process.Executable()
+				}
 			}
-		}
-		time.Sleep(100)
+		*/
+
+		processList = processMap
+
+		time.Sleep(time.Second)
 	}
 }
 
