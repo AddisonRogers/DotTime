@@ -31,31 +31,32 @@ func main() {
 	Client := http.DefaultClient
 	processList := make(map[int]string)
 	flag := 0
-	cachedProcesses := []cachedProcess{}
+	cachedProcesses := new([]cachedProcess)
 
 	for {
 		processMap := getProcesses()
 
-		// Compare the current process map with the previous one
-		if !isSubset(processList, processMap) {
-			newProcesses := difference(processMap, processList)
-			stoppedProcesses := difference(processList, processMap)
+		newProcesses := difference(processMap, processList)
+		stoppedProcesses := difference(processList, processMap)
 
-			log.Printf("New processes: %v\n", newProcesses)
-			log.Printf("Stopped processes: %v\n", stoppedProcesses)
+		log.Printf("New processes: %v\n", newProcesses)
+		log.Printf("Stopped processes: %v\n", stoppedProcesses)
 
-			addNewProcesses(cachedProcesses, newProcesses)
-			addFinishedProcesses(cachedProcesses, stoppedProcesses)
-		}
+		addNewProcesses(cachedProcesses, newProcesses)
+		addFinishedProcesses(cachedProcesses, stoppedProcesses)
 
 		processList = processMap
 
-		if flag == 59 { // Updates the server every minute
-			err := sendData(cachedProcesses, Client)
-			checkErr(err)
+		if flag%60 == 0 { // Updates the server every minute
+			go func() {
+				err := sendData(*cachedProcesses, Client)
+				checkErr(err)
+			}()
 		} else if flag == 3600 {
-			err := update(Client)
-			checkErr(err)
+			go func() {
+				err := update(Client)
+				checkErr(err)
+			}()
 			flag = 0
 		} else {
 			flag++
@@ -67,7 +68,7 @@ func main() {
 
 func checkErr(err error) {
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 }
 
@@ -81,15 +82,6 @@ func getProcesses() map[int]string {
 		processMap[process.Pid()] = process.Executable()
 	}
 	return processMap
-}
-
-func isSubset(first map[int]string, second map[int]string) bool {
-	for k, v := range first {
-		if secondValue, ok := second[k]; !ok || secondValue != v {
-			return false
-		}
-	}
-	return true
 }
 
 func difference(first map[int]string, second map[int]string) map[int]string {
@@ -144,11 +136,17 @@ func checkUpdate(Client *http.Client) (bool, error) {
 		return true, err
 	}
 
-	if string(data) == strconv.Itoa(Version) {
-		log.Printf("Update available: %s", data)
+	versionFromServer, err := strconv.Atoi(string(data))
+	if err != nil {
+		return true, err
 	}
 
-	return true, nil
+	if versionFromServer > Version {
+		log.Printf("Update available: %s", data)
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func fetchUpdate(Client *http.Client) error {
@@ -197,29 +195,27 @@ func fetchData(body io.ReadCloser) ([]byte, error) {
 	return decodedData, nil
 }
 
-func addNewProcesses(cachedProcesses []cachedProcess, newProcessMap map[int]string) []cachedProcess {
+func addNewProcesses(cachedProcesses *[]cachedProcess, newProcessMap map[int]string) {
 	currentTime := time.Now().Unix()
 	for pid, name := range newProcessMap {
-		cachedProcesses = append(cachedProcesses, cachedProcess{
-			Name:         name,
-			PID:          pid,
-			timeStarted:  &currentTime,
-			timeFinished: nil,
+		*cachedProcesses = append(*cachedProcesses, cachedProcess{
+			Name:        name,
+			PID:         pid,
+			timeStarted: &currentTime,
 		})
 	}
-	return cachedProcesses
 }
 
-func addFinishedProcesses(cachedProcesses []cachedProcess, stoppedProcessMap map[int]string) []cachedProcess {
+func addFinishedProcesses(cachedProcesses *[]cachedProcess, stoppedProcessMap map[int]string) {
 	currentTime := time.Now().Unix()
 
 	for pid, name := range stoppedProcessMap {
 		found := false
 
-		for index, process := range cachedProcesses {
+		for index, process := range *cachedProcesses {
 			// if they have the same PID and no time finished then we put the time finished there
 			if process.PID == pid && process.timeFinished == nil {
-				cachedProcesses[index].timeFinished = &currentTime
+				(*cachedProcesses)[index].timeFinished = &currentTime
 				found = true
 				break
 			}
@@ -233,11 +229,9 @@ func addFinishedProcesses(cachedProcesses []cachedProcess, stoppedProcessMap map
 				timeStarted:  nil,
 				timeFinished: &currentTime,
 			}
-			cachedProcesses = append(cachedProcesses, newProcess)
+			*cachedProcesses = append(*cachedProcesses, newProcess)
 		}
 	}
-
-	return cachedProcesses
 }
 
 func sendData(cachedProcesses []cachedProcess, Client *http.Client) error {
@@ -253,7 +247,7 @@ func sendData(cachedProcesses []cachedProcess, Client *http.Client) error {
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("failed to send data")
+		return fmt.Errorf("request failed with status code %d", resp.StatusCode)
 	}
 
 	cachedProcesses = []cachedProcess{}
