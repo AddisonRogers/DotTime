@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/emersion/go-autostart"
 	"github.com/mitchellh/go-ps"
 	"io"
 	"log"
@@ -28,6 +29,8 @@ type cachedProcess struct {
 }
 
 func main() {
+	var app = AutoStart()
+
 	Client := http.DefaultClient
 	processList := make(map[int]string)
 	flag := 0
@@ -54,7 +57,7 @@ func main() {
 			}()
 		} else if flag == 3600 {
 			go func() {
-				err := update(Client)
+				err := update(Client, app)
 				checkErr(err)
 			}()
 			flag = 0
@@ -64,6 +67,30 @@ func main() {
 
 		time.Sleep(time.Second)
 	}
+}
+
+func AutoStart() *autostart.App {
+	// Get the path of the current executable
+	executable, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	app := &autostart.App{
+		Name:        "DTService",
+		DisplayName: "DTService: Logging all processes",
+		Exec:        []string{executable},
+	}
+
+	if !app.IsEnabled() {
+		log.Println("App is not enabled, enabling it...")
+
+		if err := app.Enable(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	return app
 }
 
 func checkErr(err error) {
@@ -94,7 +121,7 @@ func difference(first map[int]string, second map[int]string) map[int]string {
 	return diff
 }
 
-func update(Client *http.Client) error {
+func update(Client *http.Client, app *autostart.App) error {
 	log.Printf("Checking for updates")
 	updateFlag, err := checkUpdate(Client)
 	if err != nil {
@@ -112,6 +139,17 @@ func update(Client *http.Client) error {
 	}
 
 	log.Println("Update successful")
+
+	if app.IsEnabled() {
+		if err := app.Disable(); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Exit the current version
+	log.Println("Exiting current version to start the updated version")
+	os.Exit(0)
+
 	return nil
 }
 
