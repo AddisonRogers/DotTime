@@ -13,7 +13,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -35,6 +37,19 @@ func main() {
 	processList := make(map[int]string)
 	flag := 0
 	cachedProcesses := new([]cachedProcess)
+
+	sigs := make(chan os.Signal, 1)
+
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigs
+
+		err := sendData(*cachedProcesses, Client)
+		checkErr(err)
+
+		os.Exit(0)
+	}()
 
 	for {
 		processMap := getProcesses()
@@ -67,6 +82,7 @@ func main() {
 
 		time.Sleep(time.Second)
 	}
+
 }
 
 func AutoStart() *autostart.App {
