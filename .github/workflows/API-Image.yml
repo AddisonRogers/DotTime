@@ -27,7 +27,7 @@ jobs:
           image: DTAPI
           tags: latest ${{ github.sha }}
           context: ./src/DTAPI/
-          dockerfiles: ./Dockerfile
+          dockerfiles: ./src/DTAPI/Dockerfile
           oci: true
 
       - name: Push to GHCR
