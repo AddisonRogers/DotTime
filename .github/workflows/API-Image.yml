@@ -22,6 +22,7 @@ jobs:
           bash .github/install_latest_podman.sh
 
       - name: Build image
+        id: build_image
         uses: redhat-actions/buildah-build@v2
         with:
           image: DTAPI
