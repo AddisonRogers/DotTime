@@ -1,4 +1,4 @@
-name: Make&Push-API-Image
+name: API-Image
 on:
   push:
     branches:
