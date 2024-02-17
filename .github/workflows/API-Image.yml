@@ -25,7 +25,7 @@ jobs:
         id: build_image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: DTAPI
+          image: ghcr.io/${{ github.repository_owner }}/DTAPI
           tags: latest ${{ github.sha }}
           context: ./src/DTAPI/
           dockerfiles: ./src/DTAPI/Dockerfile
