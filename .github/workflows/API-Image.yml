@@ -33,7 +33,7 @@ jobs:
       - name: Push to GHCR
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: ${{ steps.build_image.outputs.image }}
+          image: ghcr.io/${{ github.repository_owner }}/DTAPI
           tags: ${{ steps.build_image.outputs.tags }}
           registry: ghcr.io
           username: ${{ github.repository_owner }}
