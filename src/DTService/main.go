@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/emersion/go-autostart"
 	"github.com/mitchellh/go-ps"
+	"github.com/spiretechnology/go-autostart/v2"
 	"io"
 	"log"
 	"net/http"
@@ -85,20 +85,28 @@ func main() {
 
 }
 
-func AutoStart() *autostart.App {
+func AutoStart() autostart.Autostart {
 	// Get the path of the current executable
 	executable, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	app := &autostart.App{
+	app := autostart.New(autostart.Options{
+		Label:       "com.DotCompany.DTService",
+		Vendor:      "DotCompany",
 		Name:        "DTService",
-		DisplayName: "DTService: Logging all processes",
-		Exec:        []string{executable},
+		Description: "Logs and tracks all your processes (Consensually)",
+		Mode:        autostart.ModeUser,
+		Arguments:   []string{executable},
+	})
+
+	isEnabled, err := app.IsEnabled()
+	if err != nil {
+		return nil
 	}
 
-	if !app.IsEnabled() {
+	if !isEnabled {
 		log.Println("App is not enabled, enabling it...")
 
 		if err := app.Enable(); err != nil {
@@ -137,7 +145,7 @@ func difference(first map[int]string, second map[int]string) map[int]string {
 	return diff
 }
 
-func update(Client *http.Client, app *autostart.App) error {
+func update(Client *http.Client, app autostart.Autostart) error {
 	log.Printf("Checking for updates")
 	updateFlag, err := checkUpdate(Client)
 	if err != nil {
@@ -156,7 +164,12 @@ func update(Client *http.Client, app *autostart.App) error {
 
 	log.Println("Update successful")
 
-	if app.IsEnabled() {
+	isEnabled, err := app.IsEnabled()
+	if err != nil {
+		return nil
+	}
+
+	if isEnabled {
 		if err := app.Disable(); err != nil {
 			log.Fatal(err)
 		}
